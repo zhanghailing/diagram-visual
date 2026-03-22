@@ -6,7 +6,9 @@
       "Bash(openspec status:*)",
       "Bash(npx tsc:*)",
       "Bash(npx vitest:*)",
-      "Bash(ls c:UserstkgszOneDriveDocumentsworkspacedigram-visualsrclib*.test.ts)"
+      "Bash(ls c:UserstkgszOneDriveDocumentsworkspacedigram-visualsrclib*.test.ts)",
+      "Bash(grep -n \"\\\\.find\\(\" /c/Users/tkgsz/OneDrive/Documents/workspace/digram-visual/src/views/*.tsx)",
+      "Bash(grep -n diagrams? /c/Users/tkgsz/OneDrive/Documents/workspace/digram-visual/src/views/*.tsx)"
     ]
   }
 }

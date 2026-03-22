@@ -41,7 +41,7 @@ const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
 }
 
 export function DiagramListView() {
-  const diagrams = useStore((s) => s.project.diagrams!)
+  const diagrams = useStore((s) => s.project.diagrams ?? [])
   const createDiagram = useStore((s) => s.createDiagram)
   const deleteDiagram = useStore((s) => s.deleteDiagram)
   const activeDiagramId = useStore((s) => s.activeDiagramId)

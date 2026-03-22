@@ -99,4 +99,5 @@ export const DEMO_PROJECT: Project = {
     { componentId: 'backend', fromState: 'be-v1', toState: 'be-compat', status: 'released' },
     { componentId: 'shared-lib', fromState: 'lib-v1', toState: 'lib-v2', status: 'implemented' },
   ],
+  diagrams: [],
 }
