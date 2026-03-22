@@ -95,14 +95,14 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
         target: e.target,
         type: diagram.type === 'c4-component' ? 'rel' : 'default',
         label: e.label,
-        data: { technology: e.technology },
+        data: { technology: e.technology, labelOffset: e.labelOffset, diagramId: diagram.id },
         // Inline stroke so html-to-image captures it without relying on CSS variables
         style: { stroke: '#374151', strokeWidth: 1.5 },
         markerEnd: diagram.type !== 'c4-component'
           ? { type: MarkerType.ArrowClosed, color: '#374151' }
           : undefined,
       })),
-    [resolved.edges, diagram.type],
+    [resolved.edges, diagram.type, diagram.id],
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)

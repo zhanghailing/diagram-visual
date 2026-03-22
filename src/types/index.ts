@@ -187,6 +187,8 @@ export interface DiagramEdgeBase {
   label?: string
   /** C4 Rel technology annotation */
   technology?: string
+  /** Custom label position offset (pixels) from the computed midpoint */
+  labelOffset?: { x: number; y: number }
 }
 
 export type OverrideAction = 'hide' | 'modify'

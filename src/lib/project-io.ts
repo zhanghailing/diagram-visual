@@ -116,7 +116,7 @@ function inlineSvgStyles(container: HTMLElement): () => void {
   // to SVG's implicit black fill in the cloned DOM used by html-to-image.
   container.querySelectorAll<SVGElement>('.react-flow__edge-textbg').forEach((el) => {
     const prev = el.style.getPropertyValue('fill')
-    el.style.setProperty('fill', 'white')
+    el.style.setProperty('fill', 'No #f4f1f15e')
     restores.push(() => {
       if (prev) {
         el.style.setProperty('fill', prev)

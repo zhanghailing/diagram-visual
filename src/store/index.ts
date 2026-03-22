@@ -20,6 +20,7 @@ import type {
   DiagramId,
   DiagramNodeBase,
   DiagramEdgeBase,
+  DiagramEdgeId,
   DiagramPhase,
   PhaseId,
   PhaseState,
@@ -106,6 +107,7 @@ interface AppStore extends UIState {
       | { kind: 'edge-override'; override: EdgeOverride },
   ) => void
   setDiagramNodePosition: (diagramId: DiagramId, phase: PhaseId, nodeId: string, pos: { x: number; y: number }, manual: boolean) => void
+  updateDiagramEdgeLabelOffset: (diagramId: DiagramId, edgeId: DiagramEdgeId, offset: { x: number; y: number }) => void
   setActiveDiagram: (id: DiagramId | null) => void
   addDiagramPhase: (diagramId: DiagramId, label: string) => void
   renameDiagramPhase: (diagramId: DiagramId, phaseId: string, label: string) => void
@@ -649,6 +651,26 @@ export const useStore = create<AppStore>()(
               [phase]: { ...ps, addedNodes: ps.addedNodes.map(updateNode) },
             },
           }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    updateDiagramEdgeLabelOffset: (diagramId, edgeId, offset) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const patchEdge = (e: DiagramEdgeBase) => e.id === edgeId ? { ...e, labelOffset: offset } : e
+          const baseEdges = d.baseEdges.map(patchEdge)
+          const phases = Object.fromEntries(
+            Object.entries(d.phases).map(([phaseId, ps]) => [
+              phaseId,
+              ps ? { ...ps, addedEdges: ps.addedEdges.map(patchEdge) } : ps,
+            ])
+          ) as typeof d.phases
+          return { ...d, baseEdges, phases }
         })
         const project = { ...s.project, diagrams }
         saveToLocalStorage(project)
