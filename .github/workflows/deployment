@@ -40,5 +40,5 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages # The branch to deploy the built files to
-          folder: build # The folder containing the built static files
+          branch: main # The branch to deploy the built files to
+          folder: docs # The folder containing the built static files
