@@ -98,7 +98,6 @@ function inlineSvgStyles(container: HTMLElement): () => void {
     const prev: Record<string, string> = {}
     for (const prop of SVG_STYLE_PROPS) {
       const val = computed.getPropertyValue(prop)
-      console.log(prop, val)
       if (val && val !== 'none' && !el.style.getPropertyValue(prop)) {
         prev[prop] = el.style.getPropertyValue(prop)
         el.style.setProperty(prop, val)
@@ -111,6 +110,20 @@ function inlineSvgStyles(container: HTMLElement): () => void {
         }
       })
     }
+  })
+
+  // Edge label background rects rely on CSS for their fill; without it they default
+  // to SVG's implicit black fill in the cloned DOM used by html-to-image.
+  container.querySelectorAll<SVGElement>('.react-flow__edge-textbg').forEach((el) => {
+    const prev = el.style.getPropertyValue('fill')
+    el.style.setProperty('fill', 'white')
+    restores.push(() => {
+      if (prev) {
+        el.style.setProperty('fill', prev)
+      } else {
+        el.style.removeProperty('fill')
+      }
+    })
   })
 
   return () => restores.forEach((fn) => fn())
