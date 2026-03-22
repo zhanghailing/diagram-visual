@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { flushSync } from 'react-dom'
 import { useStore } from '@/store'
 import type { Diagram, PhaseId, SequenceParticipant, SequenceMessage } from '@/types'
 import { generateId } from '@/lib/utils'
 import { getPhaseOrder } from '@/lib/diagram-phase'
 import { PhaseSwitcher } from '@/components/PhaseSwitcher'
+import { PhaseEditorPopover } from '@/components/PhaseEditorPopover'
 import { MermaidImportDialog } from '@/components/MermaidImportDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -107,6 +108,15 @@ export function SequenceDiagramView({ diagram }: Props) {
   const diagramRef = useRef<HTMLDivElement>(null)
 
   const liveDiagram = useStore((s) => s.project.diagrams?.find((d) => d.id === diagram.id) ?? diagram)
+
+  // Reset to base phase if the currently active phase is deleted
+  useEffect(() => {
+    const phaseIds = getPhaseOrder(liveDiagram).map((p) => p.id)
+    if (!phaseIds.includes(activePhase)) {
+      setActivePhase('as-is')
+    }
+  }, [liveDiagram, activePhase])
+
   const { participants, messages } = resolveSequence(liveDiagram, activePhase)
   const { participants: allParticipants, messages: allMessages } = resolveSequenceAll(liveDiagram, activePhase)
   const currentPhaseState = liveDiagram.sequencePhases?.[activePhase]
@@ -225,6 +235,7 @@ export function SequenceDiagramView({ diagram }: Props) {
         <span className="text-xs text-muted-foreground bg-accent px-1.5 py-0.5 rounded">Sequence</span>
         <div className="ml-auto flex items-center gap-2">
           <PhaseSwitcher phases={getPhaseOrder(liveDiagram)} activePhase={activePhase} onChange={setActivePhase} />
+          <PhaseEditorPopover diagramId={diagram.id} phases={getPhaseOrder(liveDiagram)} />
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowMermaidImport(true)}>
             <FileCode2 className="h-3 w-3 mr-1" /> Import
           </Button>

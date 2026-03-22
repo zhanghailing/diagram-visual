@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import type { DiagramId, DiagramPhase } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Settings, Lock, Trash2, Plus } from 'lucide-react'
+import { Settings, Lock, Trash2, Plus, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface Props {
   diagramId: DiagramId
@@ -14,6 +14,7 @@ export function PhaseEditorPopover({ diagramId, phases }: Props) {
   const addDiagramPhase = useStore((s) => s.addDiagramPhase)
   const renameDiagramPhase = useStore((s) => s.renameDiagramPhase)
   const deleteDiagramPhase = useStore((s) => s.deleteDiagramPhase)
+  const reorderDiagramPhases = useStore((s) => s.reorderDiagramPhases)
   const [open, setOpen] = useState(false)
   const newPhaseInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -70,15 +71,37 @@ export function PhaseEditorPopover({ diagramId, phases }: Props) {
                       className="h-6 text-xs flex-1"
                     />
                     {!isBase && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                        onClick={() => deleteDiagramPhase(diagramId, phase.id)}
-                        title="Delete phase"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => reorderDiagramPhases(diagramId, idx, idx - 1)}
+                          disabled={idx === 1}
+                          title="Move up"
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => reorderDiagramPhases(diagramId, idx, idx + 1)}
+                          disabled={isLast}
+                          title="Move down"
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          onClick={() => deleteDiagramPhase(diagramId, phase.id)}
+                          title="Delete phase"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 )

@@ -113,6 +113,7 @@ interface AppStore extends UIState {
   addDiagramPhase: (diagramId: DiagramId, label: string) => void
   renameDiagramPhase: (diagramId: DiagramId, phaseId: string, label: string) => void
   deleteDiagramPhase: (diagramId: DiagramId, phaseId: string) => void
+  reorderDiagramPhases: (diagramId: DiagramId, fromIdx: number, toIdx: number) => void
   addSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participant: import('@/types').SequenceParticipant) => void
   addSequenceMessage: (diagramId: DiagramId, phase: PhaseId, message: import('@/types').SequenceMessage) => void
   reorderSequenceParticipants: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
@@ -736,6 +737,26 @@ export const useStore = create<AppStore>()(
             phases: remainingPhases,
             ...(remainingSeqPhases !== undefined ? { sequencePhases: remainingSeqPhases } : {}),
           }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    reorderDiagramPhases: (diagramId, fromIdx, toIdx) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const phaseOrder = d.phaseOrder ?? []
+          // Guard: cannot move the base phase or move anything to index 0
+          if (fromIdx === 0 || toIdx === 0 || fromIdx === toIdx) return d
+          if (fromIdx < 0 || fromIdx >= phaseOrder.length) return d
+          if (toIdx < 0 || toIdx >= phaseOrder.length) return d
+          const reordered = [...phaseOrder]
+          const [moved] = reordered.splice(fromIdx, 1)
+          reordered.splice(toIdx, 0, moved)
+          return { ...d, phaseOrder: reordered }
         })
         const project = { ...s.project, diagrams }
         saveToLocalStorage(project)
