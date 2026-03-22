@@ -23,9 +23,9 @@ function OverlayView() {
   void simulatePlanMemo(planB, dependencies, components)
 
   const allComponentIds = [...new Set([
-    ...planA.steps.map((s) => s.componentId),
-    ...planB.steps.map((s) => s.componentId),
-  ])]
+    ...planA.steps.filter((s) => s.type === 'state-transition').map((s) => s.type === 'state-transition' ? s.componentId : ''),
+    ...planB.steps.filter((s) => s.type === 'state-transition').map((s) => s.type === 'state-transition' ? s.componentId : ''),
+  ].filter(Boolean))]
   const maxSteps = Math.max(planA.steps.length, planB.steps.length)
   const displayComponents = components.filter((c) => allComponentIds.includes(c.id))
 

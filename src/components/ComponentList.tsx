@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Link } from 'lucide-react'
 import { useStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +30,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 export function ComponentList() {
   const components = useStore((s) => s.project.components)
+  const plans = useStore((s) => s.project.plans)
   const deleteComponent = useStore((s) => s.deleteComponent)
   const selectedComponentId = useStore((s) => s.selectedComponentId)
   const setSelectedComponent = useStore((s) => s.setSelectedComponent)
@@ -42,6 +43,15 @@ export function ComponentList() {
     const result = deleteComponent(id)
     if (!result.ok) setDeleteError(result.reason ?? 'Cannot delete')
     else setDeleteError(null)
+  }
+
+  /** Resolve migration-created label: "Plan X, Step N" */
+  function getMigrationCreatedLabel(c: Component): string | null {
+    if (!c.migrationCreated) return null
+    const plan = plans.find((p) => p.id === c.migrationCreated!.planId)
+    const planName = plan?.name ?? 'Unknown plan'
+    const stepNum = c.migrationCreated.stepIndex + 1
+    return `Created by: ${planName}, step ${stepNum}`
   }
 
   if (components.length === 0) {
@@ -72,81 +82,107 @@ export function ComponentList() {
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {components.map((c) => (
-            <div
-              key={c.id}
-              onClick={() => setSelectedComponent(c.id === selectedComponentId ? null : c.id)}
-              className={cn(
-                'group flex items-start gap-2 p-2 rounded-md cursor-pointer hover:bg-accent transition-colors',
-                c.id === selectedComponentId && 'bg-accent',
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-sm font-medium truncate">{c.name}</span>
-                </div>
-                <span
-                  className={cn(
-                    'text-xs px-1.5 py-0.5 rounded-full font-medium',
-                    TYPE_COLORS[c.type] ?? TYPE_COLORS.other,
+          {components.map((c) => {
+            const migrationLabel = getMigrationCreatedLabel(c)
+            const isMigrationCreated = !!c.migrationCreated
+
+            return (
+              <div
+                key={c.id}
+                onClick={() => setSelectedComponent(c.id === selectedComponentId ? null : c.id)}
+                className={cn(
+                  'group flex items-start gap-2 p-2 rounded-md cursor-pointer hover:bg-accent transition-colors',
+                  c.id === selectedComponentId && 'bg-accent',
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                    <span className="text-sm font-medium truncate">{c.name}</span>
+                    {/* migration-created badge (task 5.1) */}
+                    {isMigrationCreated && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-medium"
+                        title={migrationLabel ?? undefined}
+                      >
+                        <Link className="h-2.5 w-2.5" />
+                        migration-created
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      'text-xs px-1.5 py-0.5 rounded-full font-medium',
+                      TYPE_COLORS[c.type] ?? TYPE_COLORS.other,
+                    )}
+                  >
+                    {c.type}
+                  </span>
+                  {migrationLabel && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">{migrationLabel}</p>
                   )}
-                >
-                  {c.type}
-                </span>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {c.states.map((s) => (
-                    <Badge key={s.id} variant="outline" className="text-xs py-0 h-5">
-                      {s.name}
-                    </Badge>
-                  ))}
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {c.states.map((s) => (
+                      <Badge key={s.id} variant="outline" className="text-xs py-0 h-5">
+                        {s.name}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); setEditingComponent(c) }}
-                  aria-label={`Edit ${c.name}`}
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {/* Edit button: shown for non-migration-created components (task 5.2) */}
+                  {!isMigrationCreated && (
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Delete ${c.name}`}
+                      className="h-7 w-7"
+                      onClick={(e) => { e.stopPropagation(); setEditingComponent(c) }}
+                      aria-label={`Edit ${c.name}`}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Pencil className="h-3 w-3" />
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete "{c.name}"?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently remove the component. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    {deleteError && (
-                      <p className="text-sm text-destructive">{deleteError}</p>
-                    )}
-                    <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => setDeleteError(null)}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={() => handleDelete(c.id)}
+                  )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Delete ${c.name}`}
                       >
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete "{c.name}"?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {isMigrationCreated
+                            ? `This component was created by a structural migration step (${migrationLabel}). It cannot be deleted directly — remove the owning step instead.`
+                            : 'This will permanently remove the component. This action cannot be undone.'}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      {deleteError && (
+                        <p className="text-sm text-destructive">{deleteError}</p>
+                      )}
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeleteError(null)}>Cancel</AlertDialogCancel>
+                        {/* Only show confirm button for non-migration-created (task 5.3) */}
+                        {!isMigrationCreated && (
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDelete(c.id)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        )}
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </ScrollArea>
 

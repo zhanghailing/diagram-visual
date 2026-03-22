@@ -5,7 +5,7 @@ import type { Project } from '@/types'
  * across a gateway, backend, and two frontends.
  */
 export const DEMO_PROJECT: Project = {
-  version: 1,
+  version: 2,
   name: 'API v2 Migration Demo',
   components: [
     {
@@ -74,13 +74,13 @@ export const DEMO_PROJECT: Project = {
       name: 'Correct Order',
       description: 'Backend first, then library, then gateway, then frontends',
       steps: [
-        { id: 'cs1', componentId: 'backend', fromState: 'be-v1', toState: 'be-compat', notes: 'Add v2 endpoints alongside v1' },
-        { id: 'cs2', componentId: 'shared-lib', fromState: 'lib-v1', toState: 'lib-v2', notes: 'Release v2 client package' },
-        { id: 'cs3', componentId: 'gateway', fromState: 'gw-v1', toState: 'gw-both', notes: 'Enable v2 routing in gateway' },
-        { id: 'cs4', componentId: 'frontend-main', fromState: 'fe-v1', toState: 'fe-v2', notes: 'Upgrade main frontend' },
-        { id: 'cs5', componentId: 'frontend-mobile', fromState: 'mob-v1', toState: 'mob-v2', notes: 'Release mobile v2' },
-        { id: 'cs6', componentId: 'gateway', fromState: 'gw-both', toState: 'gw-v2', notes: 'Cut off v1 routes' },
-        { id: 'cs7', componentId: 'backend', fromState: 'be-compat', toState: 'be-v2', notes: 'Remove v1 endpoints' },
+        { id: 'cs1', type: 'state-transition', componentId: 'backend', fromState: 'be-v1', toState: 'be-compat', notes: 'Add v2 endpoints alongside v1' },
+        { id: 'cs2', type: 'state-transition', componentId: 'shared-lib', fromState: 'lib-v1', toState: 'lib-v2', notes: 'Release v2 client package' },
+        { id: 'cs3', type: 'state-transition', componentId: 'gateway', fromState: 'gw-v1', toState: 'gw-both', notes: 'Enable v2 routing in gateway' },
+        { id: 'cs4', type: 'state-transition', componentId: 'frontend-main', fromState: 'fe-v1', toState: 'fe-v2', notes: 'Upgrade main frontend' },
+        { id: 'cs5', type: 'state-transition', componentId: 'frontend-mobile', fromState: 'mob-v1', toState: 'mob-v2', notes: 'Release mobile v2' },
+        { id: 'cs6', type: 'state-transition', componentId: 'gateway', fromState: 'gw-both', toState: 'gw-v2', notes: 'Cut off v1 routes' },
+        { id: 'cs7', type: 'state-transition', componentId: 'backend', fromState: 'be-compat', toState: 'be-v2', notes: 'Remove v1 endpoints' },
       ],
     },
     {
@@ -88,10 +88,10 @@ export const DEMO_PROJECT: Project = {
       name: 'Incorrect Order (has violations)',
       description: 'Frontends migrated before gateway is ready',
       steps: [
-        { id: 'ws1', componentId: 'frontend-main', fromState: 'fe-v1', toState: 'fe-v2', notes: 'Should fail — gateway not ready' },
-        { id: 'ws2', componentId: 'backend', fromState: 'be-v1', toState: 'be-compat' },
-        { id: 'ws3', componentId: 'gateway', fromState: 'gw-v1', toState: 'gw-both' },
-        { id: 'ws4', componentId: 'frontend-mobile', fromState: 'mob-v1', toState: 'mob-v2' },
+        { id: 'ws1', type: 'state-transition', componentId: 'frontend-main', fromState: 'fe-v1', toState: 'fe-v2', notes: 'Should fail — gateway not ready' },
+        { id: 'ws2', type: 'state-transition', componentId: 'backend', fromState: 'be-v1', toState: 'be-compat' },
+        { id: 'ws3', type: 'state-transition', componentId: 'gateway', fromState: 'gw-v1', toState: 'gw-both' },
+        { id: 'ws4', type: 'state-transition', componentId: 'frontend-mobile', fromState: 'mob-v1', toState: 'mob-v2' },
       ],
     },
   ],

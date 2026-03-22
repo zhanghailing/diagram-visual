@@ -33,9 +33,22 @@ export function PlanTimelineView() {
 
   const selectedStep = plan.steps.find((s) => s.id === selectedStepId)
 
-  // Component filter
-  const planComponentIds = [...new Set(plan.steps.map((s) => s.componentId))]
-  const planComponents = components.filter((c) => planComponentIds.includes(c.id))
+  // Only show StateDiffPanel for state-transition steps
+  const isStateTransition = selectedStep?.type === 'state-transition'
+
+  // Component filter — include all components that appear in any plan step
+  const planComponentIds = new Set<string>()
+  for (const step of plan.steps) {
+    if (step.type === 'state-transition') planComponentIds.add(step.componentId)
+    else if (step.type === 'structural-merge') {
+      step.sourceIds.forEach((id) => planComponentIds.add(id))
+      planComponentIds.add(step.successorId)
+    } else if (step.type === 'structural-split') {
+      planComponentIds.add(step.sourceId)
+      step.successorIds.forEach((id) => planComponentIds.add(id))
+    }
+  }
+  const planComponents = components.filter((c) => planComponentIds.has(c.id))
 
   return (
     <div className="h-full flex flex-col">
@@ -86,8 +99,9 @@ export function PlanTimelineView() {
             <button
               key={c.id}
               onClick={() => {
+                const planCompIdList = [...planComponentIds]
                 if (visibleComponentIds === null) {
-                  setVisibleComponentIds(planComponentIds.filter((id) => id !== c.id))
+                  setVisibleComponentIds(planCompIdList.filter((id) => id !== c.id))
                 } else if (visibleComponentIds.includes(c.id)) {
                   const next = visibleComponentIds.filter((id) => id !== c.id)
                   setVisibleComponentIds(next.length === 0 ? null : next)
@@ -135,21 +149,26 @@ export function PlanTimelineView() {
               stepId={selectedStepId}
               onClose={() => setSelectedStep(null)}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full"
-              onClick={() => setShowDiff((v) => !v)}
-            >
-              {showDiff ? 'Hide' : 'Show'} State Diff
-            </Button>
-            {showDiff && (
-              <StateDiffPanel
-                componentId={selectedStep.componentId}
-                fromStateId={selectedStep.fromState}
-                toStateId={selectedStep.toState}
-                onClose={() => setShowDiff(false)}
-              />
+            {/* Only show diff button for state-transition steps */}
+            {isStateTransition && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowDiff((v) => !v)}
+                >
+                  {showDiff ? 'Hide' : 'Show'} State Diff
+                </Button>
+                {showDiff && (
+                  <StateDiffPanel
+                    componentId={selectedStep.componentId}
+                    fromStateId={selectedStep.fromState}
+                    toStateId={selectedStep.toState}
+                    onClose={() => setShowDiff(false)}
+                  />
+                )}
+              </>
             )}
           </div>
         )}

@@ -10,6 +10,7 @@ import { DependencyGraphView } from '@/views/DependencyGraphView'
 import { PlanTimelineView } from '@/views/PlanTimelineView'
 import { PlanComparisonView } from '@/views/PlanComparisonView'
 import { ReleaseTrackerView } from '@/views/ReleaseTrackerView'
+import { DiagramListView } from '@/views/DiagramListView'
 import {
   Network,
   GitCompare,
@@ -18,6 +19,7 @@ import {
   Upload,
   FilePlus2,
   Save,
+  LayoutTemplate,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -80,6 +82,7 @@ export default function App() {
     { id: 'plan-timeline', label: 'Plan Timeline', icon: TimelineIcon },
     { id: 'plan-comparison', label: 'Compare Plans', icon: GitCompare },
     { id: 'release-tracker', label: 'Release Tracker', icon: Rocket },
+    { id: 'diagrams', label: 'Diagrams', icon: LayoutTemplate },
   ]
 
   return (
@@ -175,6 +178,7 @@ export default function App() {
           {activeView === 'plan-timeline' && <PlanTimelineView />}
           {activeView === 'plan-comparison' && <PlanComparisonView />}
           {activeView === 'release-tracker' && <ReleaseTrackerView />}
+          {activeView === 'diagrams' && <DiagramListView />}
         </main>
       </div>
     </TooltipProvider>

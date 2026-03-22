@@ -25,12 +25,16 @@ const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'outline'> = {
 export const ComponentNode = memo(function ComponentNode({
   data,
   selected,
-}: NodeProps & { data: Component }) {
+}: NodeProps & { data: Component & { isRetired?: boolean; isSuccessor?: boolean } }) {
   return (
     <div
       className={cn(
         'rounded-lg border-2 p-3 min-w-[140px] max-w-[220px] shadow-sm bg-white',
-        TYPE_COLORS[data.type] ?? TYPE_COLORS.other,
+        data.isRetired
+          ? 'border-gray-300 bg-gray-100 opacity-50'
+          : data.isSuccessor
+          ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300'
+          : (TYPE_COLORS[data.type] ?? TYPE_COLORS.other),
         selected && 'ring-2 ring-primary ring-offset-1',
       )}
     >
@@ -38,9 +42,11 @@ export const ComponentNode = memo(function ComponentNode({
 
       <div className="space-y-1.5">
         <div className="flex items-start justify-between gap-1">
-          <span className="font-semibold text-sm leading-tight">{data.name}</span>
+          <span className={cn('font-semibold text-sm leading-tight', data.isRetired && 'line-through')}>
+            {data.name}
+          </span>
           <Badge variant={TYPE_BADGE[data.type] ?? 'outline'} className="text-xs shrink-0">
-            {data.type}
+            {data.isRetired ? 'retired' : data.type}
           </Badge>
         </div>
         <div className="flex flex-wrap gap-1">

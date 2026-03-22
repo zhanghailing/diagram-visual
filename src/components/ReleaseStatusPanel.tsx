@@ -23,10 +23,11 @@ export function ReleaseStatusPanel() {
   const releases = useStore((s) => s.project.releases)
   const setReleaseStatus = useStore((s) => s.setReleaseStatus)
 
-  // Collect all unique transitions from all plans
+  // Collect all unique transitions from all plans (state-transition steps only)
   const transitionSet = new Map<string, { componentId: string; fromState: string; toState: string }>()
   for (const plan of plans) {
     for (const step of plan.steps) {
+      if (step.type !== 'state-transition') continue
       const key = `${step.componentId}:${step.fromState}:${step.toState}`
       if (!transitionSet.has(key)) {
         transitionSet.set(key, {

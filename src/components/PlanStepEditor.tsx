@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Plus, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Trash2, GripVertical, GitMerge, Split } from 'lucide-react'
 import { useStore } from '@/store'
 import { simulatePlanMemo } from '@/lib/feasibility'
+import { simulatePlanUpTo } from '@/lib/plan-simulation'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -13,7 +14,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { StructuralMergeStepForm } from './StructuralMergeStepForm'
+import { StructuralSplitStepForm } from './StructuralSplitStepForm'
 import type { PlanStep } from '@/types'
+
+// ─── Add step form (state-transition) ────────────────────────────────────────
 
 interface AddStepFormProps {
   planId: string
@@ -21,8 +26,13 @@ interface AddStepFormProps {
 }
 
 function AddStepForm({ planId, onClose }: AddStepFormProps) {
-  const components = useStore((s) => s.project.components)
+  const allComponents = useStore((s) => s.project.components)
+  const plan = useStore((s) => s.project.plans.find((p) => p.id === planId))
   const addStep = useStore((s) => s.addStep)
+
+  // Filter to active components at insertion position (task 6.6)
+  const lifecycle = plan ? simulatePlanUpTo(plan, allComponents, plan.steps.length - 1) : null
+  const components = allComponents.filter((c) => !lifecycle || lifecycle.active.has(c.id))
 
   const [compId, setCompId] = useState('')
   const [fromState, setFromState] = useState('')
@@ -34,14 +44,14 @@ function AddStepForm({ planId, onClose }: AddStepFormProps) {
 
   function handleAdd() {
     if (!compId || !fromState || !toState) return setError('All fields are required.')
-    const result = addStep(planId, { componentId: compId, fromState, toState, notes: notes.trim() || undefined })
+    const result = addStep(planId, { type: 'state-transition', componentId: compId, fromState, toState, notes: notes.trim() || undefined })
     if (!result.ok) return setError(result.reason ?? 'Cannot add step')
     onClose()
   }
 
   return (
     <div className="p-3 border rounded-md bg-muted/30 space-y-2">
-      <p className="text-xs font-medium">Add Step</p>
+      <p className="text-xs font-medium">Add State Transition Step</p>
       <div className="space-y-1.5">
         <Label className="text-xs">Component</Label>
         <Select value={compId} onValueChange={(v) => { setCompId(v); setFromState(''); setToState(''); setError(null) }}>
@@ -101,6 +111,78 @@ function AddStepForm({ planId, onClose }: AddStepFormProps) {
   )
 }
 
+// ─── Step type chooser ────────────────────────────────────────────────────────
+
+type StepTypeChoice = 'state-transition' | 'structural-merge' | 'structural-split'
+
+interface AddStepChooserProps {
+  planId: string
+  onClose: () => void
+}
+
+function AddStepChooser({ planId, onClose }: AddStepChooserProps) {
+  const [stepType, setStepType] = useState<StepTypeChoice | null>(null)
+
+  if (stepType === 'state-transition') {
+    return <AddStepForm planId={planId} onClose={onClose} />
+  }
+  if (stepType === 'structural-merge') {
+    return <StructuralMergeStepForm planId={planId} onClose={onClose} />
+  }
+  if (stepType === 'structural-split') {
+    return <StructuralSplitStepForm planId={planId} onClose={onClose} />
+  }
+
+  return (
+    <div className="p-3 border rounded-md bg-muted/30 space-y-2">
+      <p className="text-xs font-medium">Choose Step Type</p>
+      <div className="grid grid-cols-1 gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2 h-9"
+          onClick={() => setStepType('state-transition')}
+        >
+          <span className="text-muted-foreground">→</span>
+          <div className="text-left">
+            <div className="text-xs font-medium">State Transition</div>
+            <div className="text-xs text-muted-foreground">Move a component from one state to another</div>
+          </div>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2 h-9"
+          onClick={() => setStepType('structural-merge')}
+        >
+          <GitMerge className="h-4 w-4 text-purple-600 shrink-0" />
+          <div className="text-left">
+            <div className="text-xs font-medium">Structural Merge</div>
+            <div className="text-xs text-muted-foreground">Merge 2+ components into a new successor</div>
+          </div>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2 h-9"
+          onClick={() => setStepType('structural-split')}
+        >
+          <Split className="h-4 w-4 text-indigo-600 shrink-0" />
+          <div className="text-left">
+            <div className="text-xs font-medium">Structural Split</div>
+            <div className="text-xs text-muted-foreground">Split a component into 2+ new successors</div>
+          </div>
+        </Button>
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Step row ─────────────────────────────────────────────────────────────────
+
 interface StepRowProps {
   step: PlanStep
   planId: string
@@ -124,15 +206,77 @@ function StepRow({
 }: StepRowProps) {
   const components = useStore((s) => s.project.components)
   const deleteStep = useStore((s) => s.deleteStep)
-  const comp = components.find((c) => c.id === step.componentId)
-  const fromStateName = comp?.states.find((s) => s.id === step.fromState)?.name ?? step.fromState
-  const toStateName = comp?.states.find((s) => s.id === step.toState)?.name ?? step.toState
 
   const statusClass = {
     ok: 'border-l-green-400',
     violation: 'border-l-red-400 bg-red-50',
     unvalidated: 'border-l-gray-300 opacity-60',
   }[status]
+
+  function renderStepContent() {
+    if (step.type === 'state-transition') {
+      const comp = components.find((c) => c.id === step.componentId)
+      const fromStateName = comp?.states.find((s) => s.id === step.fromState)?.name ?? step.fromState
+      const toStateName = comp?.states.find((s) => s.id === step.toState)?.name ?? step.toState
+      return (
+        <>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground w-5 shrink-0">#{index + 1}</span>
+            <span className="text-sm font-medium truncate">{comp?.name ?? step.componentId}</span>
+          </div>
+          <div className="flex items-center gap-1 mt-0.5 pl-6 text-xs">
+            <span className="text-muted-foreground">{fromStateName}</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="font-medium">{toStateName}</span>
+          </div>
+          {step.notes && (
+            <p className="text-xs text-muted-foreground mt-0.5 pl-6 italic truncate">{step.notes}</p>
+          )}
+        </>
+      )
+    }
+
+    if (step.type === 'structural-merge') {
+      const sourceNames = step.sourceIds.map(
+        (id) => components.find((c) => c.id === id)?.name ?? id,
+      )
+      return (
+        <>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground w-5 shrink-0">#{index + 1}</span>
+            <GitMerge className="h-3 w-3 text-purple-600 shrink-0" />
+            <span className="text-sm font-medium text-purple-800">Structural Merge</span>
+          </div>
+          <div className="mt-0.5 pl-6 text-xs text-muted-foreground">
+            {sourceNames.join(', ')} → {step.successorComponent.name}
+          </div>
+          {step.notes && (
+            <p className="text-xs text-muted-foreground mt-0.5 pl-6 italic truncate">{step.notes}</p>
+          )}
+        </>
+      )
+    }
+
+    if (step.type === 'structural-split') {
+      const srcName = components.find((c) => c.id === step.sourceId)?.name ?? step.sourceId
+      const successorNames = step.successorComponents.map((c) => c.name)
+      return (
+        <>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground w-5 shrink-0">#{index + 1}</span>
+            <Split className="h-3 w-3 text-indigo-600 shrink-0" />
+            <span className="text-sm font-medium text-indigo-800">Structural Split</span>
+          </div>
+          <div className="mt-0.5 pl-6 text-xs text-muted-foreground">
+            {srcName} → {successorNames.join(', ')}
+          </div>
+          {step.notes && (
+            <p className="text-xs text-muted-foreground mt-0.5 pl-6 italic truncate">{step.notes}</p>
+          )}
+        </>
+      )
+    }
+  }
 
   return (
     <div
@@ -155,18 +299,7 @@ function StepRow({
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground w-5 shrink-0">#{index + 1}</span>
-          <span className="text-sm font-medium truncate">{comp?.name ?? step.componentId}</span>
-        </div>
-        <div className="flex items-center gap-1 mt-0.5 pl-6 text-xs">
-          <span className="text-muted-foreground">{fromStateName}</span>
-          <span className="text-muted-foreground">→</span>
-          <span className="font-medium">{toStateName}</span>
-        </div>
-        {step.notes && (
-          <p className="text-xs text-muted-foreground mt-0.5 pl-6 italic truncate">{step.notes}</p>
-        )}
+        {renderStepContent()}
         {status === 'violation' && reason && (
           <p className="text-xs text-destructive mt-0.5 pl-6">{reason}</p>
         )}
@@ -186,6 +319,8 @@ function StepRow({
     </div>
   )
 }
+
+// ─── Main editor ─────────────────────────────────────────────────────────────
 
 export function PlanStepEditor({ planId }: { planId: string }) {
   const plan = useStore((s) => s.project.plans.find((p) => p.id === planId))
@@ -238,7 +373,7 @@ export function PlanStepEditor({ planId }: { planId: string }) {
       )}
 
       {showAddStep ? (
-        <AddStepForm planId={planId} onClose={() => setShowAddStep(false)} />
+        <AddStepChooser planId={planId} onClose={() => setShowAddStep(false)} />
       ) : (
         <Button size="sm" variant="outline" onClick={() => setShowAddStep(true)} className="w-full">
           <Plus className="h-4 w-4 mr-1" /> Add Step

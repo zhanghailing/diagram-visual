@@ -33,9 +33,11 @@ const COMPONENT_TYPES: ComponentType[] = [
 interface Props {
   initialValues?: Component
   onClose: () => void
+  /** When true, all fields are read-only (used for migration-created components) */
+  readOnly?: boolean
 }
 
-export function ComponentForm({ initialValues, onClose }: Props) {
+export function ComponentForm({ initialValues, onClose, readOnly = false }: Props) {
   const addComponent = useStore((s) => s.addComponent)
   const updateComponent = useStore((s) => s.updateComponent)
   const existingComponents = useStore((s) => s.project.components)
@@ -96,8 +98,16 @@ export function ComponentForm({ initialValues, onClose }: Props) {
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{initialValues ? 'Edit Component' : 'Add Component'}</DialogTitle>
+          <DialogTitle>
+            {readOnly ? 'View Component (read-only)' : initialValues ? 'Edit Component' : 'Add Component'}
+          </DialogTitle>
         </DialogHeader>
+        {readOnly && (
+          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            This component was created by a structural migration step and its fields can only be
+            changed by editing the owning step.
+          </div>
+        )}
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
@@ -105,9 +115,11 @@ export function ComponentForm({ initialValues, onClose }: Props) {
             <Input
               id="comp-name"
               value={name}
-              onChange={(e) => { setName(e.target.value); setError(null) }}
+              onChange={(e) => { if (!readOnly) { setName(e.target.value); setError(null) } }}
               placeholder="e.g. Backend Service"
               autoFocus
+              readOnly={readOnly}
+              className={readOnly ? 'bg-muted' : undefined}
             />
           </div>
 
@@ -188,9 +200,11 @@ export function ComponentForm({ initialValues, onClose }: Props) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </Button>
-          <Button onClick={handleSubmit}>{initialValues ? 'Save' : 'Add'}</Button>
+          {!readOnly && (
+            <Button onClick={handleSubmit}>{initialValues ? 'Save' : 'Add'}</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

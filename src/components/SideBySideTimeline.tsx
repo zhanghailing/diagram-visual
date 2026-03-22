@@ -50,7 +50,7 @@ function PlanTimelineBlock({
   const feasibility = simulatePlanMemo(plan, dependencies, components)
   const stepResultMap = Object.fromEntries(feasibility.steps.map((r) => [r.stepId, r]))
 
-  const planComponentIds = [...new Set(plan.steps.map((s) => s.componentId))]
+  const planComponentIds = [...new Set(plan.steps.filter((s) => s.type === 'state-transition').map((s) => s.type === 'state-transition' ? s.componentId : ''))]
   const displayComponents = components.filter((c) => planComponentIds.includes(c.id))
 
   const planColors = ['border-blue-400', 'border-purple-400', 'border-orange-400', 'border-green-400']
@@ -83,7 +83,7 @@ function PlanTimelineBlock({
                     <div>
                       <div>Step {i + 1}</div>
                       <div className="font-normal text-muted-foreground text-xs">
-                        {components.find((c) => c.id === plan.steps[i]?.componentId)?.name ?? '—'}
+                        {plan.steps[i]?.type === 'state-transition' ? components.find((c) => c.id === (plan.steps[i] as { componentId: string }).componentId)?.name ?? '—' : '—'}
                       </div>
                     </div>
                   ) : (
@@ -109,7 +109,7 @@ function PlanTimelineBlock({
                   const stateMap = getStateAtStep(plan, components, stepIndex)
                   const stateId = stateMap.get(comp.id) ?? comp.states[0]?.id ?? ''
                   const stateName = comp.states.find((s) => s.id === stateId)?.name ?? stateId
-                  const isTransition = step.componentId === comp.id
+                  const isTransition = step.type === 'state-transition' && step.componentId === comp.id
                   const result = isTransition ? stepResultMap[step.id] : undefined
 
                   return (

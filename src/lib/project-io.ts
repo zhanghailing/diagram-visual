@@ -1,6 +1,6 @@
 import type { Project } from '@/types'
 
-const CURRENT_VERSION = 1 as const
+const CURRENT_VERSION = 2 as const
 
 export function createEmptyProject(name = 'Untitled Project'): Project {
   return {
@@ -10,6 +10,7 @@ export function createEmptyProject(name = 'Untitled Project'): Project {
     dependencies: [],
     plans: [],
     releases: [],
+    diagrams: [],
   }
 }
 
@@ -48,9 +49,27 @@ function migrateProject(raw: unknown): Project {
     throw new Error('Not a valid project object')
   }
   const obj = raw as Record<string, unknown>
-  // v1 → current (no migration needed yet)
+
+  // v1 → v2: add type discriminant to plan steps (default missing type to "state-transition")
+  if (obj.version === 1) {
+    const plans = (obj.plans as Array<Record<string, unknown>>) ?? []
+    for (const plan of plans) {
+      const steps = (plan.steps as Array<Record<string, unknown>>) ?? []
+      for (const step of steps) {
+        if (!step.type) {
+          step.type = 'state-transition'
+        }
+      }
+    }
+    obj.version = 2
+  }
+
   if (obj.version !== CURRENT_VERSION) {
     throw new Error(`Unsupported project version: ${obj.version}`)
+  }
+  // Ensure diagrams array always exists (added in diagram-authoring-tool change)
+  if (!Array.isArray(obj.diagrams)) {
+    obj.diagrams = []
   }
   return obj as unknown as Project
 }
