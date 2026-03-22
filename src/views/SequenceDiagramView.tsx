@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { useStore } from '@/store'
 import type { Diagram, PhaseId, SequenceParticipant, SequenceMessage } from '@/types'
 import { generateId } from '@/lib/utils'
 import { getPhaseOrder } from '@/lib/diagram-phase'
 import { PhaseSwitcher } from '@/components/PhaseSwitcher'
+import { MermaidImportDialog } from '@/components/MermaidImportDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,7 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus } from 'lucide-react'
+import { Plus, FileCode2, Image, Archive } from 'lucide-react'
+import { toPng } from 'html-to-image'
+import { downloadZip, toSafeFilename } from '@/lib/project-io'
 
 const LIFELINE_WIDTH = 160
 const LIFELINE_GAP = 40
@@ -65,11 +69,15 @@ export function SequenceDiagramView({ diagram }: Props) {
   const [activePhase, setActivePhase] = useState<PhaseId>('as-is')
   const [showAddParticipant, setShowAddParticipant] = useState(false)
   const [showAddMessage, setShowAddMessage] = useState(false)
+  const [showMermaidImport, setShowMermaidImport] = useState(false)
   const [participantLabel, setParticipantLabel] = useState('')
   const [msgFrom, setMsgFrom] = useState('')
   const [msgTo, setMsgTo] = useState('')
   const [msgLabel, setMsgLabel] = useState('')
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+
+  const diagramRef = useRef<HTMLDivElement>(null)
 
   const liveDiagram = useStore((s) => s.project.diagrams?.find((d) => d.id === diagram.id) ?? diagram)
   const { participants, messages } = resolveSequence(liveDiagram, activePhase)
@@ -102,6 +110,64 @@ export function SequenceDiagramView({ diagram }: Props) {
     setShowAddMessage(false)
   }
 
+  function handleMermaidImport(importedParticipants: SequenceParticipant[], importedMessages: SequenceMessage[]) {
+    const baseOrder = participants.length
+    for (let i = 0; i < importedParticipants.length; i++) {
+      addSequenceParticipant(diagram.id, activePhase, {
+        ...importedParticipants[i],
+        order: baseOrder + i,
+      })
+    }
+    const msgBaseOrder = messages.length
+    for (let i = 0; i < importedMessages.length; i++) {
+      addSequenceMessage(diagram.id, activePhase, {
+        ...importedMessages[i],
+        order: msgBaseOrder + i,
+      })
+    }
+  }
+
+  async function handleExportPng() {
+    const container = diagramRef.current
+    if (!container) return
+    setIsExporting(true)
+    try {
+      const safeName = toSafeFilename(liveDiagram.name)
+      await toPng(container, { backgroundColor: '#ffffff' }) // warm-up
+      const dataUrl = await toPng(container, { backgroundColor: '#ffffff' })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `${safeName}-${activePhase}.png`
+      a.click()
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  async function handleExportAllPhases() {
+    const container = diagramRef.current
+    if (!container) return
+    setIsExporting(true)
+    const originalPhase = activePhase
+    const safeName = toSafeFilename(liveDiagram.name)
+    const phases = getPhaseOrder(liveDiagram)
+    const files: { name: string; blob: Blob }[] = []
+    try {
+      for (const phase of phases) {
+        flushSync(() => setActivePhase(phase.id))
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+        const dataUrl = await toPng(container, { backgroundColor: '#ffffff' })
+        const res = await fetch(dataUrl)
+        const blob = await res.blob()
+        files.push({ name: `${safeName}-${phase.id}.png`, blob })
+      }
+      await downloadZip(files, `${safeName}-all-phases.zip`)
+    } finally {
+      setActivePhase(originalPhase)
+      setIsExporting(false)
+    }
+  }
+
   const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, idx: number) => {
     e.dataTransfer.setData('text/plain', String(idx))
   }, [])
@@ -127,6 +193,9 @@ export function SequenceDiagramView({ diagram }: Props) {
         <span className="text-xs text-muted-foreground bg-accent px-1.5 py-0.5 rounded">Sequence</span>
         <div className="ml-auto flex items-center gap-2">
           <PhaseSwitcher phases={getPhaseOrder(liveDiagram)} activePhase={activePhase} onChange={setActivePhase} />
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowMermaidImport(true)}>
+            <FileCode2 className="h-3 w-3 mr-1" /> Import
+          </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddParticipant(true)}>
             <Plus className="h-3 w-3 mr-1" /> Participant
           </Button>
@@ -139,6 +208,24 @@ export function SequenceDiagramView({ diagram }: Props) {
           >
             <Plus className="h-3 w-3 mr-1" /> Message
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={handleExportPng}
+            disabled={isExporting || participants.length === 0}
+          >
+            <Image className="h-3 w-3 mr-1" /> PNG
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={handleExportAllPhases}
+            disabled={isExporting || participants.length === 0}
+          >
+            <Archive className="h-3 w-3 mr-1" /> All Phases
+          </Button>
         </div>
       </div>
 
@@ -149,7 +236,7 @@ export function SequenceDiagramView({ diagram }: Props) {
             Add participants to start building the sequence diagram.
           </div>
         ) : (
-          <div style={{ width: totalWidth }}>
+          <div ref={diagramRef} style={{ width: totalWidth }}>
             {/* HTML participant header row (supports native drag) */}
             <div className="flex mb-0" style={{ gap: LIFELINE_GAP }}>
               {participants.map((p, idx) => (
@@ -284,6 +371,16 @@ export function SequenceDiagramView({ diagram }: Props) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Mermaid Import Dialog */}
+      {showMermaidImport && (
+        <MermaidImportDialog
+          diagramType="sequence"
+          onImport={() => {}}
+          onImportSequence={handleMermaidImport}
+          onClose={() => setShowMermaidImport(false)}
+        />
       )}
     </div>
   )
