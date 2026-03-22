@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { BaseEdge, EdgeLabelRenderer, getStraightPath, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getStraightPath, useReactFlow, type EdgeProps } from '@xyflow/react'
 import { useStore } from '@/store'
 
 export function RelEdge({
@@ -18,6 +18,7 @@ export function RelEdge({
   const diagramId = data?.diagramId as string | undefined
 
   const updateLabelOffset = useStore((s) => s.updateDiagramEdgeLabelOffset)
+  const { getViewport } = useReactFlow()
 
   // Local drag state — tracks live offset during drag before committing to store
   const [dragDelta, setDragDelta] = useState<{ x: number; y: number } | null>(null)
@@ -43,16 +44,18 @@ export function RelEdge({
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragStart.current) return
+    const { zoom } = getViewport()
     setDragDelta({
-      x: e.clientX - dragStart.current.pointerX,
-      y: e.clientY - dragStart.current.pointerY,
+      x: (e.clientX - dragStart.current.pointerX) / zoom,
+      y: (e.clientY - dragStart.current.pointerY) / zoom,
     })
-  }, [])
+  }, [getViewport])
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragStart.current) return
-    const dx = e.clientX - dragStart.current.pointerX
-    const dy = e.clientY - dragStart.current.pointerY
+    const { zoom } = getViewport()
+    const dx = (e.clientX - dragStart.current.pointerX) / zoom
+    const dy = (e.clientY - dragStart.current.pointerY) / zoom
     const newOffset = {
       x: dragStart.current.baseX + dx,
       y: dragStart.current.baseY + dy,
@@ -62,7 +65,7 @@ export function RelEdge({
     if (diagramId) {
       updateLabelOffset(diagramId, id, newOffset)
     }
-  }, [diagramId, id, updateLabelOffset])
+  }, [diagramId, id, updateLabelOffset, getViewport])
 
   return (
     <>
@@ -77,7 +80,7 @@ export function RelEdge({
               cursor: dragDelta ? 'grabbing' : 'grab',
               userSelect: 'none',
             }}
-            className="flex flex-col items-center"
+            className="nopan flex flex-col items-center"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

@@ -93,7 +93,7 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
         id: e.id,
         source: e.source,
         target: e.target,
-        type: diagram.type === 'c4-component' ? 'rel' : 'default',
+        type: diagram.type !== 'sequence' ? 'rel' : 'default',
         label: e.label,
         data: { technology: e.technology, labelOffset: e.labelOffset, diagramId: diagram.id },
         // Inline stroke so html-to-image captures it without relying on CSS variables
