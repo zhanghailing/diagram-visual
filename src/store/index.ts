@@ -115,6 +115,8 @@ interface AppStore extends UIState {
   addSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participant: import('@/types').SequenceParticipant) => void
   addSequenceMessage: (diagramId: DiagramId, phase: PhaseId, message: import('@/types').SequenceMessage) => void
   reorderSequenceParticipants: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
+  toggleHideSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participantId: string) => void
+  toggleHideSequenceMessage: (diagramId: DiagramId, phase: PhaseId, messageId: string) => void
 
   // ── UI ────────────────────────────────────────────────────────────────────
   setActiveView: (view: ActiveView) => void
@@ -796,6 +798,40 @@ export const useStore = create<AppStore>()(
           const baseIds = new Set((d.baseParticipants ?? []).map((p) => p.id))
           const newBase = withOrders.filter((p) => baseIds.has(p.id))
           return { ...d, baseParticipants: newBase }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    toggleHideSequenceParticipant: (diagramId, phase, participantId) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const sp = d.sequencePhases?.[phase] ?? emptySequencePhaseState()
+          const alreadyHidden = sp.hiddenParticipantIds.includes(participantId)
+          const hiddenParticipantIds = alreadyHidden
+            ? sp.hiddenParticipantIds.filter((id) => id !== participantId)
+            : [...sp.hiddenParticipantIds, participantId]
+          return { ...d, sequencePhases: { ...d.sequencePhases, [phase]: { ...sp, hiddenParticipantIds } } }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    toggleHideSequenceMessage: (diagramId, phase, messageId) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const sp = d.sequencePhases?.[phase] ?? emptySequencePhaseState()
+          const alreadyHidden = sp.hiddenMessageIds.includes(messageId)
+          const hiddenMessageIds = alreadyHidden
+            ? sp.hiddenMessageIds.filter((id) => id !== messageId)
+            : [...sp.hiddenMessageIds, messageId]
+          return { ...d, sequencePhases: { ...d.sequencePhases, [phase]: { ...sp, hiddenMessageIds } } }
         })
         const project = { ...s.project, diagrams }
         saveToLocalStorage(project)

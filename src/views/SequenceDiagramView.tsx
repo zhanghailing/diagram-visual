@@ -23,13 +23,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, FileCode2, Image, Archive } from 'lucide-react'
+import { Plus, FileCode2, Image, Archive, Eye, EyeOff } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { downloadZip, toSafeFilename } from '@/lib/project-io'
 
 const LIFELINE_WIDTH = 160
 const LIFELINE_GAP = 40
 const MESSAGE_HEIGHT = 48
+
+/** Returns all participants/messages up to the given phase WITHOUT filtering hidden elements. */
+function resolveSequenceAll(
+  diagram: Diagram,
+  phase: PhaseId,
+): { participants: SequenceParticipant[]; messages: SequenceMessage[] } {
+  let participants = [...(diagram.baseParticipants ?? [])]
+  let messages = [...(diagram.baseMessages ?? [])]
+  const phaseOrder = getPhaseOrder(diagram)
+  const phaseIdx = phaseOrder.findIndex((p) => p.id === phase)
+
+  for (let i = 1; i <= phaseIdx; i++) {
+    const ps = diagram.sequencePhases?.[phaseOrder[i].id]
+    if (!ps) continue
+    participants = [...participants, ...ps.addedParticipants]
+    messages = [...messages, ...ps.addedMessages]
+  }
+
+  return {
+    participants: [...participants].sort((a, b) => a.order - b.order),
+    messages: [...messages].sort((a, b) => a.order - b.order),
+  }
+}
 
 function resolveSequence(
   diagram: Diagram,
@@ -65,6 +88,8 @@ export function SequenceDiagramView({ diagram }: Props) {
   const addSequenceParticipant = useStore((s) => s.addSequenceParticipant)
   const addSequenceMessage = useStore((s) => s.addSequenceMessage)
   const reorderSequenceParticipants = useStore((s) => s.reorderSequenceParticipants)
+  const toggleHideSequenceParticipant = useStore((s) => s.toggleHideSequenceParticipant)
+  const toggleHideSequenceMessage = useStore((s) => s.toggleHideSequenceMessage)
 
   const [activePhase, setActivePhase] = useState<PhaseId>('as-is')
   const [showAddParticipant, setShowAddParticipant] = useState(false)
@@ -81,6 +106,11 @@ export function SequenceDiagramView({ diagram }: Props) {
 
   const liveDiagram = useStore((s) => s.project.diagrams?.find((d) => d.id === diagram.id) ?? diagram)
   const { participants, messages } = resolveSequence(liveDiagram, activePhase)
+  const { participants: allParticipants, messages: allMessages } = resolveSequenceAll(liveDiagram, activePhase)
+  const currentPhaseState = liveDiagram.sequencePhases?.[activePhase]
+  const hiddenParticipantIds = currentPhaseState?.hiddenParticipantIds ?? []
+  const hiddenMessageIds = currentPhaseState?.hiddenMessageIds ?? []
+  const isAsIs = activePhase === 'as-is'
 
   function handleAddParticipant() {
     if (!participantLabel.trim()) return
@@ -228,6 +258,60 @@ export function SequenceDiagramView({ diagram }: Props) {
           </Button>
         </div>
       </div>
+
+      {/* Visibility panel — only shown in non-as-is phases */}
+      {!isAsIs && allParticipants.length > 0 && (
+        <div className="border-b px-3 py-2 bg-muted/30 shrink-0">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground font-medium w-20 shrink-0">Participants</span>
+              {allParticipants.map((p) => {
+                const hidden = hiddenParticipantIds.includes(p.id)
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => toggleHideSequenceParticipant(diagram.id, activePhase, p.id)}
+                    className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors ${
+                      hidden
+                        ? 'bg-muted text-muted-foreground border-muted-foreground/30 line-through opacity-50'
+                        : 'bg-background text-foreground border-border hover:bg-accent'
+                    }`}
+                    title={hidden ? 'Click to show' : 'Click to hide'}
+                  >
+                    {hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
+                    {p.label}
+                  </button>
+                )
+              })}
+            </div>
+            {allMessages.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground font-medium w-20 shrink-0">Messages</span>
+                {allMessages.map((m) => {
+                  const hidden = hiddenMessageIds.includes(m.id)
+                  const fromLabel = allParticipants.find((p) => p.id === m.from)?.label ?? m.from
+                  const toLabel = allParticipants.find((p) => p.id === m.to)?.label ?? m.to
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleHideSequenceMessage(diagram.id, activePhase, m.id)}
+                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors ${
+                        hidden
+                          ? 'bg-muted text-muted-foreground border-muted-foreground/30 line-through opacity-50'
+                          : 'bg-background text-foreground border-border hover:bg-accent'
+                      }`}
+                      title={hidden ? 'Click to show' : 'Click to hide'}
+                    >
+                      {hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
+                      {fromLabel} → {toLabel}: {m.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Diagram area */}
       <div className="flex-1 overflow-auto p-4">
