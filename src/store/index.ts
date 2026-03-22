@@ -28,6 +28,7 @@ import type {
   EdgeOverride,
 } from '@/types'
 import { generateId } from '@/lib/utils'
+import { getPhaseOrder } from '@/lib/diagram-phase'
 import { createEmptyProject, saveToLocalStorage, loadFromLocalStorage } from '@/lib/project-io'
 import { DEMO_PROJECT } from '@/lib/demo-project'
 import { getStepComponentIds } from '@/lib/plan-simulation'
@@ -115,6 +116,7 @@ interface AppStore extends UIState {
   addSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participant: import('@/types').SequenceParticipant) => void
   addSequenceMessage: (diagramId: DiagramId, phase: PhaseId, message: import('@/types').SequenceMessage) => void
   reorderSequenceParticipants: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
+  reorderSequenceMessages: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
   toggleHideSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participantId: string) => void
   toggleHideSequenceMessage: (diagramId: DiagramId, phase: PhaseId, messageId: string) => void
 
@@ -777,12 +779,12 @@ export const useStore = create<AppStore>()(
       set((s) => {
         const diagrams = (s.project.diagrams ?? []).map((d) => {
           if (d.id !== diagramId) return d
+          const phaseOrder = getPhaseOrder(d)
+          const phaseIdx = phaseOrder.findIndex((p) => p.id === phase)
           const getAll = () => {
-            const PHASES: PhaseId[] = ['as-is', 'phase-1', 'phase-2']
             let ps = [...(d.baseParticipants ?? [])]
-            const phaseIdx = PHASES.indexOf(phase)
             for (let i = 1; i <= phaseIdx; i++) {
-              const sp = d.sequencePhases?.[PHASES[i]]
+              const sp = d.sequencePhases?.[phaseOrder[i].id]
               if (sp) ps = [...ps, ...sp.addedParticipants].filter((p) => !sp.hiddenParticipantIds.includes(p.id))
             }
             return ps.sort((a, b) => a.order - b.order)
@@ -794,10 +796,70 @@ export const useStore = create<AppStore>()(
           reordered.splice(fromIdx, 1)
           reordered.splice(toIdx, 0, moved)
           const withOrders = reordered.map((p, i) => ({ ...p, order: i }))
-          // Rewrite baseParticipants with new orders
-          const baseIds = new Set((d.baseParticipants ?? []).map((p) => p.id))
-          const newBase = withOrders.filter((p) => baseIds.has(p.id))
-          return { ...d, baseParticipants: newBase }
+          const orderById = new Map(withOrders.map((p) => [p.id, p.order]))
+          // Write back to baseParticipants
+          const newBase = (d.baseParticipants ?? []).map((p) =>
+            orderById.has(p.id) ? { ...p, order: orderById.get(p.id)! } : p,
+          )
+          // Write back to each phase's addedParticipants
+          const newSequencePhases = { ...d.sequencePhases }
+          for (let i = 1; i <= phaseIdx; i++) {
+            const pid = phaseOrder[i].id
+            const sp = d.sequencePhases?.[pid]
+            if (!sp) continue
+            newSequencePhases[pid] = {
+              ...sp,
+              addedParticipants: sp.addedParticipants.map((p) =>
+                orderById.has(p.id) ? { ...p, order: orderById.get(p.id)! } : p,
+              ),
+            }
+          }
+          return { ...d, baseParticipants: newBase, sequencePhases: newSequencePhases }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    reorderSequenceMessages: (diagramId, phase, fromIdx, toIdx) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const phaseOrder = getPhaseOrder(d)
+          const phaseIdx = phaseOrder.findIndex((p) => p.id === phase)
+          // Resolve all messages up to this phase without hidden filtering
+          let all = [...(d.baseMessages ?? [])]
+          for (let i = 1; i <= phaseIdx; i++) {
+            const sp = d.sequencePhases?.[phaseOrder[i].id]
+            if (sp) all = [...all, ...sp.addedMessages]
+          }
+          all = all.sort((a, b) => a.order - b.order)
+          const moved = all[fromIdx]
+          if (!moved) return d
+          const reordered = [...all]
+          reordered.splice(fromIdx, 1)
+          reordered.splice(toIdx, 0, moved)
+          const withOrders = reordered.map((m, i) => ({ ...m, order: i }))
+          const orderById = new Map(withOrders.map((m) => [m.id, m.order]))
+          // Write back to baseMessages
+          const newBase = (d.baseMessages ?? []).map((m) =>
+            orderById.has(m.id) ? { ...m, order: orderById.get(m.id)! } : m,
+          )
+          // Write back to each phase's addedMessages
+          const newSequencePhases = { ...d.sequencePhases }
+          for (let i = 1; i <= phaseIdx; i++) {
+            const pid = phaseOrder[i].id
+            const sp = d.sequencePhases?.[pid]
+            if (!sp) continue
+            newSequencePhases[pid] = {
+              ...sp,
+              addedMessages: sp.addedMessages.map((m) =>
+                orderById.has(m.id) ? { ...m, order: orderById.get(m.id)! } : m,
+              ),
+            }
+          }
+          return { ...d, baseMessages: newBase, sequencePhases: newSequencePhases }
         })
         const project = { ...s.project, diagrams }
         saveToLocalStorage(project)

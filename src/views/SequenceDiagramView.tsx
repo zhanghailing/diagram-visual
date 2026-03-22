@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, FileCode2, Image, Archive, Eye, EyeOff } from 'lucide-react'
+import { Plus, FileCode2, Image, Archive, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { downloadZip, toSafeFilename } from '@/lib/project-io'
 
@@ -90,6 +90,7 @@ export function SequenceDiagramView({ diagram }: Props) {
   const reorderSequenceParticipants = useStore((s) => s.reorderSequenceParticipants)
   const toggleHideSequenceParticipant = useStore((s) => s.toggleHideSequenceParticipant)
   const toggleHideSequenceMessage = useStore((s) => s.toggleHideSequenceMessage)
+  const reorderSequenceMessages = useStore((s) => s.reorderSequenceMessages)
 
   const [activePhase, setActivePhase] = useState<PhaseId>('as-is')
   const [showAddParticipant, setShowAddParticipant] = useState(false)
@@ -100,6 +101,7 @@ export function SequenceDiagramView({ diagram }: Props) {
   const [msgTo, setMsgTo] = useState('')
   const [msgLabel, setMsgLabel] = useState('')
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [dragOverMsgIdx, setDragOverMsgIdx] = useState<number | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
   const diagramRef = useRef<HTMLDivElement>(null)
@@ -287,24 +289,40 @@ export function SequenceDiagramView({ diagram }: Props) {
             {allMessages.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-xs text-muted-foreground font-medium w-20 shrink-0">Messages</span>
-                {allMessages.map((m) => {
+                {allMessages.map((m, mIdx) => {
                   const hidden = hiddenMessageIds.includes(m.id)
                   const fromLabel = allParticipants.find((p) => p.id === m.from)?.label ?? m.from
                   const toLabel = allParticipants.find((p) => p.id === m.to)?.label ?? m.to
                   return (
-                    <button
+                    <div
                       key={m.id}
-                      onClick={() => toggleHideSequenceMessage(diagram.id, activePhase, m.id)}
-                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors ${
-                        hidden
-                          ? 'bg-muted text-muted-foreground border-muted-foreground/30 line-through opacity-50'
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(mIdx))}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverMsgIdx(mIdx) }}
+                      onDragLeave={() => setDragOverMsgIdx(null)}
+                      onDrop={(e) => {
+                        const fromMsgIdx = parseInt(e.dataTransfer.getData('text/plain'))
+                        if (fromMsgIdx !== mIdx) reorderSequenceMessages(diagram.id, activePhase, fromMsgIdx, mIdx)
+                        setDragOverMsgIdx(null)
+                      }}
+                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors cursor-grab select-none ${
+                        dragOverMsgIdx === mIdx
+                          ? 'bg-blue-50 border-blue-400'
+                          : hidden
+                          ? 'bg-muted text-muted-foreground border-muted-foreground/30 opacity-50'
                           : 'bg-background text-foreground border-border hover:bg-accent'
                       }`}
-                      title={hidden ? 'Click to show' : 'Click to hide'}
                     >
-                      {hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
-                      {fromLabel} → {toLabel}: {m.label}
-                    </button>
+                      <GripVertical className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <button
+                        onClick={() => toggleHideSequenceMessage(diagram.id, activePhase, m.id)}
+                        className={hidden ? 'line-through flex items-center gap-1' : 'flex items-center gap-1'}
+                        title={hidden ? 'Click to show' : 'Click to hide'}
+                      >
+                        {hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
+                        {fromLabel} → {toLabel}: {m.label}
+                      </button>
+                    </div>
                   )
                 })}
               </div>
