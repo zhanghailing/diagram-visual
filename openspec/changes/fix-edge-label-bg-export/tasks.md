@@ -5,6 +5,6 @@
 
 ## 2. Verification
 
-- [ ] 2.1 Export a diagram with labelled edges and confirm label backgrounds are white (not black) in the PNG
-- [ ] 2.2 Confirm the live diagram is visually unchanged after export (no leftover inline styles)
+- [x] 2.1 Export a diagram with labelled edges and confirm label backgrounds are white (not black) in the PNG
+- [x] 2.2 Confirm the live diagram is visually unchanged after export (no leftover inline styles)
 
