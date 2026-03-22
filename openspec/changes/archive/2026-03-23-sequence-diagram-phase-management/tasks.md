@@ -16,8 +16,8 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Manually verify: add a phase in sequence diagram → appears in switcher
-- [ ] 4.2 Manually verify: rename a phase → label updates in switcher
-- [ ] 4.3 Manually verify: delete a phase → removed from switcher, data cleared
-- [ ] 4.4 Manually verify: reorder phases → order reflected in switcher and cumulative resolution
+- [x] 4.1 Manually verify: add a phase in sequence diagram → appears in switcher
+- [x] 4.2 Manually verify: rename a phase → label updates in switcher
+- [x] 4.3 Manually verify: delete a phase → removed from switcher, data cleared
+- [x] 4.4 Manually verify: reorder phases → order reflected in switcher and cumulative resolution
 - [x] 4.5 Run existing tests (`npm test`) and confirm no regressions

@@ -39,3 +39,6 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Claude setting
+.claude/settings**.json
