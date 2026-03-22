@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  MarkerType,
   useNodesState,
   useEdgesState,
-  addEdge,
   type Node,
   type Edge,
   type Connection,
@@ -21,7 +21,9 @@ import { generateId } from '@/lib/utils'
 import { PhaseSwitcher } from '@/components/PhaseSwitcher'
 import { DiagramPalette } from '@/components/DiagramPalette'
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel'
+import { EdgePropertiesPanel } from '@/components/EdgePropertiesPanel'
 import { MermaidImportDialog } from '@/components/MermaidImportDialog'
+import { PhaseEditorPopover } from '@/components/PhaseEditorPopover'
 import { C4PersonNode } from '@/components/diagram-nodes/C4PersonNode'
 import { C4SystemNode } from '@/components/diagram-nodes/C4SystemNode'
 import { C4ContainerNode } from '@/components/diagram-nodes/C4ContainerNode'
@@ -31,10 +33,11 @@ import { DatabaseNode } from '@/components/diagram-nodes/DatabaseNode'
 import { ActorNode } from '@/components/diagram-nodes/ActorNode'
 import { QueueNode } from '@/components/diagram-nodes/QueueNode'
 import { RelEdge } from '@/components/diagram-nodes/RelEdge'
-import { resolveDiagramPhase } from '@/lib/diagram-phase'
+import { resolveDiagramPhase, resolvedPhaseToMermaid, getPhaseOrder } from '@/lib/diagram-phase'
 import { applyDagreLayout } from '@/lib/diagram-layout'
+import { exportCanvasToPng, capturePng, downloadZip, toSafeFilename } from '@/lib/project-io'
 import { Button } from '@/components/ui/button'
-import { Layout, Upload } from 'lucide-react'
+import { Layout, Upload, Download, ChevronDown } from 'lucide-react'
 
 const NODE_TYPES: NodeTypes = {
   'c4-person': C4PersonNode as never,
@@ -59,9 +62,15 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
   const updateDiagramElement = useStore((s) => s.updateDiagramElement)
   const setDiagramNodePosition = useStore((s) => s.setDiagramNodePosition)
 
-  const [activePhase, setActivePhase] = useState<PhaseId>('as-is')
+  const phases = getPhaseOrder(diagram)
+  const [activePhase, setActivePhase] = useState<PhaseId>(phases[0]?.id ?? 'as-is')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const [copiedMermaid, setCopiedMermaid] = useState(false)
+  const [exportingZip, setExportingZip] = useState(false)
+  const canvasContainerRef = useRef<HTMLDivElement>(null)
 
   // Resolve elements for the active phase (inheritance + overrides)
   const resolved = useMemo(() => resolveDiagramPhase(diagram, activePhase), [diagram, activePhase])
@@ -87,6 +96,11 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
         type: diagram.type === 'c4-component' ? 'rel' : 'default',
         label: e.label,
         data: { technology: e.technology },
+        // Inline stroke so html-to-image captures it without relying on CSS variables
+        style: { stroke: '#374151', strokeWidth: 1.5 },
+        markerEnd: diagram.type !== 'c4-component'
+          ? { type: MarkerType.ArrowClosed, color: '#374151' }
+          : undefined,
       })),
     [resolved.edges, diagram.type],
   )
@@ -103,6 +117,14 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
     setEdges(rfEdges)
   }, [rfEdges, setEdges])
 
+  // Reset active phase to first when the active phase is deleted
+  useEffect(() => {
+    const ids = getPhaseOrder(diagram).map((p) => p.id)
+    if (!ids.includes(activePhase)) {
+      setActivePhase(ids[0] ?? 'as-is')
+    }
+  }, [diagram, activePhase])
+
   const onConnect = useCallback(
     (connection: Connection) => {
       const edge: DiagramEdgeBase = {
@@ -112,9 +134,8 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
         label: '',
       }
       updateDiagramElement(diagram.id, activePhase, { kind: 'add-edge', edge })
-      setEdges((eds) => addEdge({ ...connection, id: edge.id, type: diagram.type === 'c4-component' ? 'rel' : 'default' }, eds))
     },
-    [diagram.id, diagram.type, activePhase, updateDiagramElement, setEdges],
+    [diagram.id, activePhase, updateDiagramElement],
   )
 
   const onNodeDragStop = useCallback(
@@ -172,6 +193,48 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
   }
 
   const selectedNode = resolved.nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedEdge = resolved.edges.find((e) => e.id === selectedEdgeId) ?? null
+
+  async function handleExportPng() {
+    setExportMenuOpen(false)
+    const el = canvasContainerRef.current
+    if (!el) return
+    const safeDiagram = toSafeFilename(diagram.name)
+    await exportCanvasToPng(el, `${safeDiagram}-${activePhase}.png`)
+  }
+
+  async function handleCopyMermaid() {
+    setExportMenuOpen(false)
+    const mermaid = resolvedPhaseToMermaid(resolved)
+    await navigator.clipboard.writeText(mermaid)
+    setCopiedMermaid(true)
+    setTimeout(() => setCopiedMermaid(false), 2000)
+  }
+
+  async function handleExportAllZip() {
+    setExportMenuOpen(false)
+    const el = canvasContainerRef.current
+    if (!el) return
+    setExportingZip(true)
+    try {
+      const safeDiagram = toSafeFilename(diagram.name)
+      const savedPhase = activePhase
+      const files: Array<{ name: string; blob: Blob }> = []
+
+      for (const phase of phases.map((p) => p.id)) {
+        setActivePhase(phase)
+        // Let React re-render the new phase before capturing
+        await new Promise<void>((resolve) => setTimeout(resolve, 300))
+        const blob = await capturePng(el)
+        files.push({ name: `${safeDiagram}-${phase}.png`, blob })
+      }
+
+      setActivePhase(savedPhase)
+      await downloadZip(files, `${safeDiagram}-all-phases.zip`)
+    } finally {
+      setExportingZip(false)
+    }
+  }
 
   return (
     <div className="flex h-full">
@@ -187,17 +250,59 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
             {diagram.type.replace('-', ' ')}
           </span>
           <div className="ml-auto flex items-center gap-2">
-            <PhaseSwitcher activePhase={activePhase} onChange={setActivePhase} />
+            <PhaseSwitcher phases={phases} activePhase={activePhase} onChange={setActivePhase} />
+            <PhaseEditorPopover diagramId={diagram.id} phases={phases} />
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleRelayout}>
               <Layout className="h-3 w-3 mr-1" /> Re-layout All
             </Button>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowImportDialog(true)}>
               <Upload className="h-3 w-3 mr-1" /> Import Mermaid
             </Button>
+            {/* Export dropdown */}
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setExportMenuOpen((o) => !o)}
+                disabled={exportingZip}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                {exportingZip ? 'Exporting…' : 'Export'}
+                <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+              {exportMenuOpen && (
+                <>
+                  {/* Click-away overlay */}
+                  <div className="fixed inset-0 z-10" onClick={() => setExportMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 w-52 rounded-md border bg-popover shadow-md text-xs">
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 hover:bg-accent rounded-t-md"
+                      onClick={handleExportPng}
+                    >
+                      <Download className="h-3 w-3" /> Export PNG (current phase)
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 hover:bg-accent"
+                      onClick={handleCopyMermaid}
+                    >
+                      <Download className="h-3 w-3" />
+                      {copiedMermaid ? 'Copied!' : 'Copy Mermaid (clipboard)'}
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 hover:bg-accent rounded-b-md"
+                      onClick={handleExportAllZip}
+                    >
+                      <Download className="h-3 w-3" /> Export All Phases (ZIP)
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0" ref={canvasContainerRef}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -209,8 +314,9 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
-            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-            onPaneClick={() => setSelectedNodeId(null)}
+            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null) }}
+            onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null) }}
+            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null) }}
             deleteKeyCode={['Delete', 'Backspace']}
             fitView
           >
@@ -227,7 +333,17 @@ export function DiagramCanvasView({ diagram }: DiagramCanvasViewProps) {
           node={selectedNode}
           diagramId={diagram.id}
           phase={activePhase}
+          phaseLabel={phases.find((p) => p.id === activePhase)?.label ?? activePhase}
           onClose={() => setSelectedNodeId(null)}
+        />
+      )}
+      {selectedEdge && (
+        <EdgePropertiesPanel
+          edge={selectedEdge}
+          diagramId={diagram.id}
+          phase={activePhase}
+          phaseLabel={phases.find((p) => p.id === activePhase)?.label ?? activePhase}
+          onClose={() => setSelectedEdgeId(null)}
         />
       )}
 

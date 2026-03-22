@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveDiagramPhase, diffPhases } from './diagram-phase'
+import { resolveDiagramPhase, diffPhases, getPhaseOrder } from './diagram-phase'
 import type { Diagram, DiagramNodeBase } from '@/types'
 
 function makeNode(id: string, label: string): DiagramNodeBase {
@@ -17,6 +17,36 @@ function makeDiagram(overrides?: Partial<Diagram>): Diagram {
     ...overrides,
   }
 }
+
+// ─── getPhaseOrder ────────────────────────────────────────────────────────────
+
+describe('getPhaseOrder', () => {
+  it('returns diagram.phaseOrder when present', () => {
+    const d = makeDiagram({
+      phaseOrder: [
+        { id: 'p0', label: 'Base' },
+        { id: 'p1', label: 'Step 1' },
+      ],
+    })
+    const order = getPhaseOrder(d)
+    expect(order).toHaveLength(2)
+    expect(order[0].id).toBe('p0')
+    expect(order[1].id).toBe('p1')
+  })
+
+  it('returns default 3-phase list when phaseOrder is absent', () => {
+    const d = makeDiagram()
+    const order = getPhaseOrder(d)
+    expect(order).toHaveLength(3)
+    expect(order.map((p) => p.id)).toEqual(['as-is', 'phase-1', 'phase-2'])
+  })
+
+  it('returns default 3-phase list when phaseOrder is empty', () => {
+    const d = makeDiagram({ phaseOrder: [] })
+    const order = getPhaseOrder(d)
+    expect(order).toHaveLength(3)
+  })
+})
 
 // ─── Phase element resolution ─────────────────────────────────────────────────
 
@@ -99,6 +129,29 @@ describe('resolveDiagramPhase', () => {
     const { nodes } = resolveDiagramPhase(d, 'phase-2')
     expect(nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['a', 'b', 'c']))
     expect(nodes).toHaveLength(3)
+  })
+
+  it('4-phase diagram: inheritance walks all phases in order', () => {
+    const d = makeDiagram({
+      phaseOrder: [
+        { id: 'p0', label: 'Base' },
+        { id: 'p1', label: 'Step 1' },
+        { id: 'p2', label: 'Step 2' },
+        { id: 'p3', label: 'Step 3' },
+      ],
+      baseNodes: [makeNode('a', 'A')],
+      phases: {
+        p1: { addedNodes: [makeNode('b', 'B')], addedEdges: [], nodeOverrides: [], edgeOverrides: [] },
+        p2: { addedNodes: [makeNode('c', 'C')], addedEdges: [], nodeOverrides: [], edgeOverrides: [] },
+        p3: { addedNodes: [makeNode('d', 'D')], addedEdges: [], nodeOverrides: [], edgeOverrides: [] },
+      },
+    })
+    const { nodes } = resolveDiagramPhase(d, 'p3')
+    expect(nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['a', 'b', 'c', 'd']))
+    expect(nodes).toHaveLength(4)
+    // Verify p2 view does not include p3 nodes
+    const { nodes: p2nodes } = resolveDiagramPhase(d, 'p2')
+    expect(p2nodes.map((n) => n.id)).not.toContain('d')
   })
 
   it('as-is view does NOT show phase-1 additions', () => {

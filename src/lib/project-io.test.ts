@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
-import { createEmptyProject } from './project-io'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createEmptyProject, exportCanvasToPng, capturePng } from './project-io'
 import type { Project } from '@/types'
+
+vi.mock('html-to-image', () => ({
+  toPng: vi.fn(),
+}))
+
+const { toPng } = await import('html-to-image')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -158,6 +164,93 @@ describe('project round-trip (2.3, 9.4)', () => {
     }
   })
 })
+
+// ─── PNG capture helper ───────────────────────────────────────────────────────
+
+function makeContainer(hasReactFlowRoot: boolean): HTMLElement {
+  const container = document.createElement('div')
+  container.getBoundingClientRect = () => ({ width: 800, height: 600 } as DOMRect)
+
+  if (hasReactFlowRoot) {
+    const root = document.createElement('div')
+    root.classList.add('react-flow')
+    root.getBoundingClientRect = () => ({ width: 800, height: 600 } as DOMRect)
+    container.appendChild(root)
+  }
+
+  return container
+}
+
+describe('captureReactFlowPng — resolveReactFlowRoot + options', () => {
+  beforeEach(() => {
+    vi.mocked(toPng).mockResolvedValue('data:image/png;base64,abc')
+    globalThis.fetch = vi.fn().mockResolvedValue({ blob: () => Promise.resolve(new Blob()) })
+    vi.clearAllMocks()
+    vi.mocked(toPng).mockResolvedValue('data:image/png;base64,abc')
+  })
+
+  it('targets .react-flow element when present', async () => {
+    const container = makeContainer(true)
+    const reactFlowEl = container.querySelector('.react-flow')!
+
+    await capturePng(container)
+
+    expect(vi.mocked(toPng).mock.calls[0][0]).toBe(reactFlowEl)
+  })
+
+  it('falls back to container when .react-flow is not found', async () => {
+    const container = makeContainer(false)
+
+    await capturePng(container)
+
+    expect(vi.mocked(toPng).mock.calls[0][0]).toBe(container)
+  })
+
+  it('passes explicit width and height from getBoundingClientRect', async () => {
+    const container = makeContainer(true)
+
+    await capturePng(container)
+
+    expect(vi.mocked(toPng)).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ width: 800, height: 600 }),
+    )
+  })
+
+  it('calls toPng twice (SVG marker serialization workaround)', async () => {
+    const container = makeContainer(true)
+
+    await capturePng(container)
+
+    expect(vi.mocked(toPng)).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('exportCanvasToPng', () => {
+  beforeEach(() => {
+    vi.mocked(toPng).mockResolvedValue('data:image/png;base64,abc')
+  })
+
+  it('sets download filename on the anchor element', async () => {
+    const container = makeContainer(true)
+    const clicks: string[] = []
+    const origCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag)
+      if (tag === 'a') {
+        el.click = () => { clicks.push((el as HTMLAnchorElement).download) }
+      }
+      return el
+    })
+
+    await exportCanvasToPng(container, 'diagram.png')
+
+    expect(clicks).toEqual(['diagram.png'])
+    vi.restoreAllMocks()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe('v1 → v2 migration (1.5)', () => {
   it('projects with v1 schema have type field defaulted to state-transition', async () => {

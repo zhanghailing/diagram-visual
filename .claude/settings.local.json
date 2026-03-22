@@ -3,7 +3,10 @@
     "allow": [
       "Bash(openspec new:*)",
       "Bash(openspec instructions:*)",
-      "Bash(openspec status:*)"
+      "Bash(openspec status:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(ls c:UserstkgszOneDriveDocumentsworkspacedigram-visualsrclib*.test.ts)"
     ]
   }
 }

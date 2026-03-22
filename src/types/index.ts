@@ -161,8 +161,13 @@ export interface NodePosition {
 export type DiagramId = string
 export type DiagramNodeId = string
 export type DiagramEdgeId = string
-export type PhaseId = 'as-is' | 'phase-1' | 'phase-2'
+export type PhaseId = string
 export type DiagramType = 'c4-component' | 'architecture' | 'sequence'
+
+export interface DiagramPhase {
+  id: string
+  label: string
+}
 
 export interface DiagramNodeBase {
   id: DiagramNodeId
@@ -189,8 +194,8 @@ export type OverrideAction = 'hide' | 'modify'
 export interface NodeOverride {
   nodeId: DiagramNodeId
   action: OverrideAction
-  /** Partial label override when action is 'modify' */
   label?: string
+  description?: string
   position?: { x: number; y: number }
   manuallyPositioned?: boolean
 }
@@ -244,6 +249,8 @@ export interface Diagram {
   baseEdges: DiagramEdgeBase[]
   /** Per-phase overrides and additions */
   phases: Partial<Record<PhaseId, PhaseState>>
+  /** User-defined ordered phase list. If absent, defaults to the 3-phase legacy list. */
+  phaseOrder?: DiagramPhase[]
   /** Sequence-diagram base participants/messages (only used when type === 'sequence') */
   baseParticipants?: SequenceParticipant[]
   baseMessages?: SequenceMessage[]

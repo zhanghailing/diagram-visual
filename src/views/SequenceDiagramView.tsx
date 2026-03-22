@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useStore } from '@/store'
 import type { Diagram, PhaseId, SequenceParticipant, SequenceMessage } from '@/types'
 import { generateId } from '@/lib/utils'
+import { getPhaseOrder } from '@/lib/diagram-phase'
 import { PhaseSwitcher } from '@/components/PhaseSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,18 +27,17 @@ const LIFELINE_WIDTH = 160
 const LIFELINE_GAP = 40
 const MESSAGE_HEIGHT = 48
 
-const PHASE_ORDER: PhaseId[] = ['as-is', 'phase-1', 'phase-2']
-
 function resolveSequence(
   diagram: Diagram,
   phase: PhaseId,
 ): { participants: SequenceParticipant[]; messages: SequenceMessage[] } {
   let participants = [...(diagram.baseParticipants ?? [])]
   let messages = [...(diagram.baseMessages ?? [])]
-  const phaseIdx = PHASE_ORDER.indexOf(phase)
+  const phaseOrder = getPhaseOrder(diagram)
+  const phaseIdx = phaseOrder.findIndex((p) => p.id === phase)
 
   for (let i = 1; i <= phaseIdx; i++) {
-    const ps = diagram.sequencePhases?.[PHASE_ORDER[i]]
+    const ps = diagram.sequencePhases?.[phaseOrder[i].id]
     if (!ps) continue
     participants = [...participants, ...ps.addedParticipants].filter(
       (p) => !ps.hiddenParticipantIds.includes(p.id),
@@ -126,7 +126,7 @@ export function SequenceDiagramView({ diagram }: Props) {
         <span className="font-medium text-sm">{diagram.name}</span>
         <span className="text-xs text-muted-foreground bg-accent px-1.5 py-0.5 rounded">Sequence</span>
         <div className="ml-auto flex items-center gap-2">
-          <PhaseSwitcher activePhase={activePhase} onChange={setActivePhase} />
+          <PhaseSwitcher phases={getPhaseOrder(liveDiagram)} activePhase={activePhase} onChange={setActivePhase} />
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddParticipant(true)}>
             <Plus className="h-3 w-3 mr-1" /> Participant
           </Button>

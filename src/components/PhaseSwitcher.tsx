@@ -1,21 +1,16 @@
-import type { PhaseId } from '@/types'
+import type { DiagramPhase } from '@/types'
 import { cn } from '@/lib/utils'
 
-const PHASES: { id: PhaseId; label: string }[] = [
-  { id: 'as-is', label: 'As-Is' },
-  { id: 'phase-1', label: 'Phase 1' },
-  { id: 'phase-2', label: 'Phase 2' },
-]
-
 interface Props {
-  activePhase: PhaseId
-  onChange: (phase: PhaseId) => void
+  phases: DiagramPhase[]
+  activePhase: string
+  onChange: (phase: string) => void
 }
 
-export function PhaseSwitcher({ activePhase, onChange }: Props) {
+export function PhaseSwitcher({ phases, activePhase, onChange }: Props) {
   return (
     <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-      {PHASES.map((p) => (
+      {phases.map((p) => (
         <button
           key={p.id}
           onClick={() => onChange(p.id)}

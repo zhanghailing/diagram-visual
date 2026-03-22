@@ -10,17 +10,19 @@ interface Props {
   node: DiagramNodeBase
   diagramId: DiagramId
   phase: PhaseId
+  phaseLabel: string
   onClose: () => void
 }
 
-export function NodePropertiesPanel({ node, diagramId, phase, onClose }: Props) {
+export function NodePropertiesPanel({ node, diagramId, phase, phaseLabel, onClose }: Props) {
   const updateDiagramElement = useStore((s) => s.updateDiagramElement)
   const [label, setLabel] = useState(node.label)
+  const [description, setDescription] = useState(node.description ?? '')
 
   function handleSave() {
     updateDiagramElement(diagramId, phase, {
       kind: 'node-override',
-      override: { nodeId: node.id, action: 'modify', label },
+      override: { nodeId: node.id, action: 'modify', label, description: description || undefined },
     })
     onClose()
   }
@@ -58,9 +60,19 @@ export function NodePropertiesPanel({ node, diagramId, phase, onClose }: Props) 
             autoFocus
           />
         </div>
+        <div>
+          <Label htmlFor="prop-desc" className="text-xs text-muted-foreground">Description</Label>
+          <Input
+            id="prop-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="mt-1 h-7 text-xs"
+            placeholder="Optional"
+          />
+        </div>
         {phase !== 'as-is' && (
           <p className="text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1">
-            Editing in <strong>{phase}</strong>. Changes saved as a phase override.
+            Editing in <strong>{phaseLabel}</strong>. Changes saved as a phase override.
           </p>
         )}
         {phase !== 'as-is' && (
@@ -70,7 +82,7 @@ export function NodePropertiesPanel({ node, diagramId, phase, onClose }: Props) 
             className="h-7 text-xs text-destructive hover:text-destructive gap-1"
             onClick={handleHide}
           >
-            <EyeOff className="h-3 w-3" /> Hide in {phase}
+            <EyeOff className="h-3 w-3" /> Hide in {phaseLabel}
           </Button>
         )}
       </div>

@@ -1,6 +1,53 @@
-import type { Diagram, PhaseId, DiagramNodeBase, DiagramEdgeBase } from '@/types'
+import type { Diagram, DiagramPhase, PhaseId, DiagramNodeBase, DiagramEdgeBase } from '@/types'
 
-const PHASE_ORDER: PhaseId[] = ['as-is', 'phase-1', 'phase-2']
+// ─── Mermaid export ───────────────────────────────────────────────────────────
+
+function sanitizeMermaidId(id: string): string {
+  // UUID hyphens are invalid in Mermaid node IDs — prefix with 'n' and strip hyphens
+  return 'n' + id.replace(/-/g, '')
+}
+
+function escapeMermaidLabel(label: string): string {
+  // Replace characters that would break Mermaid label syntax
+  return label.replace(/"/g, '#quot;').replace(/\[/g, '(').replace(/\]/g, ')')
+}
+
+/**
+ * Converts a resolved phase (nodes + edges) to Mermaid `flowchart LR` syntax.
+ * Suitable for pasting into a Confluence Mermaid macro.
+ */
+export function resolvedPhaseToMermaid(phase: ResolvedPhase): string {
+  const lines: string[] = ['flowchart LR']
+
+  for (const node of phase.nodes) {
+    const safeId = sanitizeMermaidId(node.id)
+    const label = escapeMermaidLabel(node.label)
+    lines.push(`  ${safeId}[${label}]`)
+  }
+
+  for (const edge of phase.edges) {
+    const srcId = sanitizeMermaidId(edge.source)
+    const tgtId = sanitizeMermaidId(edge.target)
+    if (edge.label) {
+      const label = escapeMermaidLabel(edge.label)
+      lines.push(`  ${srcId} -->|${label}| ${tgtId}`)
+    } else {
+      lines.push(`  ${srcId} --> ${tgtId}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+const DEFAULT_PHASES: DiagramPhase[] = [
+  { id: 'as-is', label: 'As-Is' },
+  { id: 'phase-1', label: 'Phase 1' },
+  { id: 'phase-2', label: 'Phase 2' },
+]
+
+export function getPhaseOrder(diagram: Diagram): DiagramPhase[] {
+  return diagram.phaseOrder && diagram.phaseOrder.length > 0 ? diagram.phaseOrder : DEFAULT_PHASES
+}
 
 export interface ResolvedPhase {
   nodes: DiagramNodeBase[]
@@ -17,9 +64,10 @@ export function resolveDiagramPhase(diagram: Diagram, targetPhase: PhaseId): Res
   let edges: DiagramEdgeBase[] = [...diagram.baseEdges]
 
   // Walk through phases in order up to and including the target
-  const phaseIndex = PHASE_ORDER.indexOf(targetPhase)
+  const phaseOrder = getPhaseOrder(diagram)
+  const phaseIndex = phaseOrder.findIndex((p) => p.id === targetPhase)
   for (let i = 1; i <= phaseIndex; i++) {
-    const phaseId = PHASE_ORDER[i]
+    const phaseId = phaseOrder[i].id
     const phaseState = diagram.phases[phaseId]
     if (!phaseState) continue
 
@@ -38,6 +86,7 @@ export function resolveDiagramPhase(diagram: Diagram, targetPhase: PhaseId): Res
           return {
             ...n,
             ...(override.label !== undefined ? { label: override.label } : {}),
+            ...(override.description !== undefined ? { description: override.description } : {}),
             ...(override.position !== undefined ? { position: override.position } : {}),
             ...(override.manuallyPositioned !== undefined ? { manuallyPositioned: override.manuallyPositioned } : {}),
           }

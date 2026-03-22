@@ -1,4 +1,6 @@
 import type { Project } from '@/types'
+import { toPng } from 'html-to-image'
+import JSZip from 'jszip'
 
 const CURRENT_VERSION = 2 as const
 
@@ -73,6 +75,114 @@ function migrateProject(raw: unknown): Project {
   }
   return obj as unknown as Project
 }
+
+// ─── Diagram export ────────────────────────────────────────────────────────────
+
+/** Converts a diagram/project name to a safe kebab-case filename fragment. */
+export function toSafeFilename(name: string): string {
+  return name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase()
+}
+
+/**
+ * html-to-image uses cloneNode(true) for SVG elements, which copies attributes but
+ * not computed CSS styles. ReactFlow edge paths get their stroke/fill from a stylesheet,
+ * not inline styles, so they render invisibly in the captured image. Before capturing,
+ * inline computed stroke/fill/opacity on all SVG drawing elements, then restore after.
+ */
+function inlineSvgStyles(container: HTMLElement): () => void {
+  const SVG_STYLE_PROPS = ['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity', 'stroke-dasharray', 'opacity']
+  const restores: Array<() => void> = []
+
+  container.querySelectorAll<SVGElement>('.react-flow__edges *').forEach((el) => {
+    const computed = getComputedStyle(el)
+    const prev: Record<string, string> = {}
+    for (const prop of SVG_STYLE_PROPS) {
+      const val = computed.getPropertyValue(prop)
+      console.log(prop, val)
+      if (val && val !== 'none' && !el.style.getPropertyValue(prop)) {
+        prev[prop] = el.style.getPropertyValue(prop)
+        el.style.setProperty(prop, val)
+      }
+    }
+    if (Object.keys(prev).length > 0) {
+      restores.push(() => {
+        for (const [prop, val] of Object.entries(prev)) {
+          el.style.setProperty(prop, val)
+        }
+      })
+    }
+  })
+
+  return () => restores.forEach((fn) => fn())
+}
+
+const RF_UI_SELECTORS = ['.react-flow__controls', '.react-flow__minimap', '.react-flow__background']
+
+async function captureReactFlowPng(container: HTMLElement): Promise<string> {
+  // Target .react-flow__renderer which contains both the viewport (nodes) and
+  // the edges SVG (including <defs> arrowhead markers). Falling back to the
+  // .react-flow root, then the container if not found.
+  const rfRoot = container.querySelector<HTMLElement>('.react-flow') ?? container
+  const { width, height } = rfRoot.getBoundingClientRect()
+  const target = rfRoot.querySelector<HTMLElement>('.react-flow__renderer') ?? rfRoot
+
+  const restore = inlineSvgStyles(rfRoot)
+  try {
+    const options = {
+      backgroundColor: '#ffffff',
+      width,
+      height,
+      filter: (node: HTMLElement) => !RF_UI_SELECTORS.some((sel) => node.matches?.(sel)),
+    }
+    await toPng(target, options) // first call: warms up font/image resource loading
+    return toPng(target, options) // second call: produces complete output
+  } finally {
+    restore()
+  }
+}
+
+/**
+ * Captures a DOM element as PNG and triggers a browser download.
+ * Filename should include the `.png` extension.
+ */
+export async function exportCanvasToPng(element: HTMLElement, filename: string): Promise<void> {
+  const dataUrl = await captureReactFlowPng(element)
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = filename
+  a.click()
+}
+
+/**
+ * Captures a DOM element as a PNG Blob (used for ZIP bundling).
+ */
+export async function capturePng(element: HTMLElement): Promise<Blob> {
+  const dataUrl = await captureReactFlowPng(element)
+  const res = await fetch(dataUrl)
+  return res.blob()
+}
+
+/**
+ * Bundles multiple files into a ZIP and triggers a browser download.
+ */
+export async function downloadZip(
+  files: Array<{ name: string; blob: Blob }>,
+  zipName: string,
+): Promise<void> {
+  const zip = new JSZip()
+  for (const { name, blob } of files) {
+    zip.file(name, blob)
+  }
+  const content = await zip.generateAsync({ type: 'blob' })
+  const url = URL.createObjectURL(content)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = zipName
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ─── Local storage ─────────────────────────────────────────────────────────────
 
 const LS_KEY = 'migplan_autosave'
 

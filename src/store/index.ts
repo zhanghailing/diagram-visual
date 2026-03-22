@@ -20,6 +20,7 @@ import type {
   DiagramId,
   DiagramNodeBase,
   DiagramEdgeBase,
+  DiagramPhase,
   PhaseId,
   PhaseState,
   NodeOverride,
@@ -106,6 +107,9 @@ interface AppStore extends UIState {
   ) => void
   setDiagramNodePosition: (diagramId: DiagramId, phase: PhaseId, nodeId: string, pos: { x: number; y: number }, manual: boolean) => void
   setActiveDiagram: (id: DiagramId | null) => void
+  addDiagramPhase: (diagramId: DiagramId, label: string) => void
+  renameDiagramPhase: (diagramId: DiagramId, phaseId: string, label: string) => void
+  deleteDiagramPhase: (diagramId: DiagramId, phaseId: string) => void
   addSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participant: import('@/types').SequenceParticipant) => void
   addSequenceMessage: (diagramId: DiagramId, phase: PhaseId, message: import('@/types').SequenceMessage) => void
   reorderSequenceParticipants: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
@@ -585,11 +589,36 @@ export const useStore = create<AppStore>()(
             return { ...d, phases: { ...d.phases, [phase]: { ...ps, addedEdges: ps.addedEdges.filter((e) => e.id !== update.edgeId) } } }
           }
           if (update.kind === 'node-override') {
+            // as-is phase: overrides are never applied during resolution — update base directly
+            if (isBase && update.override.action === 'modify') {
+              return {
+                ...d,
+                baseNodes: d.baseNodes.map((n) =>
+                  n.id !== update.override.nodeId ? n : {
+                    ...n,
+                    ...(update.override.label !== undefined ? { label: update.override.label } : {}),
+                    ...(update.override.description !== undefined ? { description: update.override.description } : {}),
+                  }
+                ),
+              }
+            }
             const ps = d.phases[phase] ?? emptyPhaseState()
             const overrides = ps.nodeOverrides.filter((o) => o.nodeId !== update.override.nodeId)
             return { ...d, phases: { ...d.phases, [phase]: { ...ps, nodeOverrides: [...overrides, update.override] } } }
           }
           if (update.kind === 'edge-override') {
+            // as-is phase: update base edge directly
+            if (isBase && update.override.action === 'modify') {
+              return {
+                ...d,
+                baseEdges: d.baseEdges.map((e) =>
+                  e.id !== update.override.edgeId ? e : {
+                    ...e,
+                    ...(update.override.label !== undefined ? { label: update.override.label } : {}),
+                  }
+                ),
+              }
+            }
             const ps = d.phases[phase] ?? emptyPhaseState()
             const overrides = ps.edgeOverrides.filter((o) => o.edgeId !== update.override.edgeId)
             return { ...d, phases: { ...d.phases, [phase]: { ...ps, edgeOverrides: [...overrides, update.override] } } }
@@ -628,6 +657,59 @@ export const useStore = create<AppStore>()(
     },
 
     setActiveDiagram: (id) => set({ activeDiagramId: id }),
+
+    addDiagramPhase: (diagramId, label) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const current = d.phaseOrder && d.phaseOrder.length > 0
+            ? d.phaseOrder
+            : [{ id: 'as-is', label: 'As-Is' }, { id: 'phase-1', label: 'Phase 1' }, { id: 'phase-2', label: 'Phase 2' }]
+          const newPhase: DiagramPhase = { id: generateId(), label }
+          return { ...d, phaseOrder: [...current, newPhase] }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    renameDiagramPhase: (diagramId, phaseId, label) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const phaseOrder = (d.phaseOrder ?? []).map((p) => p.id === phaseId ? { ...p, label } : p)
+          return { ...d, phaseOrder }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    deleteDiagramPhase: (diagramId, phaseId) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) => {
+          if (d.id !== diagramId) return d
+          const phaseOrder = d.phaseOrder ?? []
+          if (phaseOrder.length === 0 || phaseOrder[0]?.id === phaseId) return d // no-op on base phase
+          const newPhaseOrder = phaseOrder.filter((p) => p.id !== phaseId)
+          const { [phaseId]: _removedPhase, ...remainingPhases } = d.phases
+          const remainingSeqPhases = d.sequencePhases
+            ? Object.fromEntries(Object.entries(d.sequencePhases).filter(([k]) => k !== phaseId))
+            : undefined
+          return {
+            ...d,
+            phaseOrder: newPhaseOrder,
+            phases: remainingPhases,
+            ...(remainingSeqPhases !== undefined ? { sequencePhases: remainingSeqPhases } : {}),
+          }
+        })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
 
     addSequenceParticipant: (diagramId, phase, participant) => {
       set((s) => {
