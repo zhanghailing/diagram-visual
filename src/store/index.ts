@@ -588,7 +588,13 @@ export const useStore = create<AppStore>()(
           if (update.kind === 'remove-edge') {
             if (isBase) return { ...d, baseEdges: d.baseEdges.filter((e) => e.id !== update.edgeId) }
             const ps = d.phases[phase] ?? emptyPhaseState()
-            return { ...d, phases: { ...d.phases, [phase]: { ...ps, addedEdges: ps.addedEdges.filter((e) => e.id !== update.edgeId) } } }
+            // If the edge was added in this phase, remove it directly
+            if (ps.addedEdges.some((e) => e.id === update.edgeId)) {
+              return { ...d, phases: { ...d.phases, [phase]: { ...ps, addedEdges: ps.addedEdges.filter((e) => e.id !== update.edgeId) } } }
+            }
+            // Otherwise it's inherited — hide it via an override
+            const overrides = ps.edgeOverrides.filter((o) => o.edgeId !== update.edgeId)
+            return { ...d, phases: { ...d.phases, [phase]: { ...ps, edgeOverrides: [...overrides, { edgeId: update.edgeId, action: 'hide' as const }] } } }
           }
           if (update.kind === 'node-override') {
             // as-is phase: overrides are never applied during resolution — update base directly

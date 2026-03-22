@@ -4,7 +4,7 @@ import type { DiagramEdgeBase, DiagramId, PhaseId } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X } from 'lucide-react'
+import { X, EyeOff } from 'lucide-react'
 
 interface Props {
   edge: DiagramEdgeBase
@@ -22,6 +22,14 @@ export function EdgePropertiesPanel({ edge, diagramId, phase, phaseLabel, onClos
     updateDiagramElement(diagramId, phase, {
       kind: 'edge-override',
       override: { edgeId: edge.id, action: 'modify', label: label || undefined },
+    })
+    onClose()
+  }
+
+  function handleHide() {
+    updateDiagramElement(diagramId, phase, {
+      kind: 'edge-override',
+      override: { edgeId: edge.id, action: 'hide' },
     })
     onClose()
   }
@@ -52,6 +60,16 @@ export function EdgePropertiesPanel({ edge, diagramId, phase, phaseLabel, onClos
           <p className="text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1">
             Editing in <strong>{phaseLabel}</strong>. Changes saved as a phase override.
           </p>
+        )}
+        {phase !== 'as-is' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs text-destructive hover:text-destructive gap-1"
+            onClick={handleHide}
+          >
+            <EyeOff className="h-3 w-3" /> Hide in {phaseLabel}
+          </Button>
         )}
       </div>
 
