@@ -1,65 +1,84 @@
 import { generateId } from '@/lib/utils'
 import type { DiagramNodeBase, DiagramEdgeBase, SequenceParticipant, SequenceMessage } from '@/types'
+import mermaid from 'mermaid'
+import type { Diagram } from 'mermaid/dist/Diagram.js'
+import type { FlowDB } from 'mermaid/dist/diagrams/flowchart/flowDb.js'
+import type { SequenceDB } from 'mermaid/dist/diagrams/sequence/sequenceDb.js'
+
+// Ensure diagram type detectors are registered (addDiagrams is called inside initialize)
+let initialized = false
+function ensureInitialized() {
+  if (!initialized) {
+    mermaid.initialize({ startOnLoad: false })
+    initialized = true
+  }
+}
 
 export type ParsedFlowchart = { nodes: DiagramNodeBase[]; edges: DiagramEdgeBase[] }
 export type ParsedC4 = { nodes: DiagramNodeBase[]; edges: DiagramEdgeBase[] }
 export type ParsedSequence = { participants: SequenceParticipant[]; messages: SequenceMessage[] }
 
+export class MermaidParseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MermaidParseError'
+  }
+}
+
 // ─── Flowchart / graph ────────────────────────────────────────────────────────
 
 /**
  * Parse Mermaid `graph` or `flowchart` syntax into canvas nodes and edges.
- * Supports: node declarations with optional labels, edges (-->, --->, --, etc.)
+ * Uses Mermaid's internal AST parser to support the full Mermaid grammar.
+ * Subgraph blocks are skipped with a console warning.
  */
-export function parseMermaidFlowchart(text: string): ParsedFlowchart {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-
-  const firstLine = lines[0]?.toLowerCase() ?? ''
+export async function parseMermaidFlowchart(text: string): Promise<ParsedFlowchart> {
+  ensureInitialized()
+  const firstLine = text.trim().split('\n')[0]?.toLowerCase() ?? ''
   if (!firstLine.startsWith('graph') && !firstLine.startsWith('flowchart')) {
-    throw new Error('Expected "graph" or "flowchart" as the first line.')
+    throw new MermaidParseError('Expected "graph" or "flowchart" as the first line.')
   }
 
-  const nodeMap = new Map<string, { id: string; label: string }>()
-  const edges: DiagramEdgeBase[] = []
-
-  function ensureNode(rawId: string, label?: string): string {
-    if (!nodeMap.has(rawId)) {
-      nodeMap.set(rawId, { id: generateId(), label: label ?? rawId })
-    } else if (label) {
-      nodeMap.get(rawId)!.label = label
-    }
-    return nodeMap.get(rawId)!.id
+  let diagram: Diagram
+  try {
+    diagram = await mermaid.mermaidAPI.getDiagramFromText(text)
+  } catch (err) {
+    throw new MermaidParseError(`Parse error: ${(err as Error).message}`)
   }
 
-  // Edge patterns: A --> B, A -->|label| B, A -- label --> B
-  const EDGE_RE = /^([A-Za-z0-9_]+)(?:\[([^\]]+)\])?\s*(?:--[>-]+(?:\|([^|]+)\|)?|-\.->|===>|==>)\s*([A-Za-z0-9_]+)(?:\[([^\]]+)\])?/
+  const db = diagram.db as FlowDB
+  const vertexMap = db.getVertices()
+  const flowEdges = db.getEdges()
+  const subGraphs = db.getSubGraphs()
 
-  for (const line of lines.slice(1)) {
-    if (line.startsWith('%%') || line.startsWith('style') || line.startsWith('classDef')) continue
-
-    const edgeMatch = EDGE_RE.exec(line)
-    if (edgeMatch) {
-      const [, srcId, srcLabel, edgeLabel, tgtId, tgtLabel] = edgeMatch
-      const sourceId = ensureNode(srcId, srcLabel)
-      const targetId = ensureNode(tgtId, tgtLabel)
-      edges.push({ id: generateId(), source: sourceId, target: targetId, label: edgeLabel })
-      continue
-    }
-
-    // Standalone node declarations: A[Label] or A(Label) or A{Label}
-    const nodeMatch = /^([A-Za-z0-9_]+)[\[\({\|]([^\]\)\}|]+)[\]\)\}|]/.exec(line)
-    if (nodeMatch) {
-      ensureNode(nodeMatch[1], nodeMatch[2])
-    }
+  if (subGraphs.length > 0) {
+    console.warn(`[mermaid-parser] ${subGraphs.length} subgraph(s) were skipped during import.`)
   }
 
-  const nodes: DiagramNodeBase[] = [...nodeMap.values()].map((n) => ({
-    id: n.id,
-    nodeType: 'box',
-    label: n.label,
-    position: { x: 0, y: 0 },
-    manuallyPositioned: false,
-  }))
+  // Map mermaid vertex IDs to our generated IDs
+  const idMap = new Map<string, string>()
+  const nodes: DiagramNodeBase[] = []
+
+  for (const [mermaidId, vertex] of vertexMap) {
+    const id = generateId()
+    idMap.set(mermaidId, id)
+    nodes.push({
+      id,
+      nodeType: 'box',
+      label: vertex.text ?? mermaidId,
+      position: { x: 0, y: 0 },
+      manuallyPositioned: false,
+    })
+  }
+
+  const edges: DiagramEdgeBase[] = flowEdges
+    .filter((e) => idMap.has(e.start) && idMap.has(e.end))
+    .map((e) => ({
+      id: generateId(),
+      source: idMap.get(e.start)!,
+      target: idMap.get(e.end)!,
+      label: e.text || undefined,
+    }))
 
   return { nodes, edges }
 }
@@ -68,7 +87,7 @@ export function parseMermaidFlowchart(text: string): ParsedFlowchart {
 
 /**
  * Parse Mermaid C4Component or C4Context syntax.
- * Supports: Person, System, Container, Component, Rel
+ * Uses a regex-based parser — C4 is not supported by @mermaid-js/parser or Diagram.fromText.
  */
 export function parseMermaidC4(text: string): ParsedC4 {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -133,56 +152,93 @@ export function parseMermaidC4(text: string): ParsedC4 {
 
 // ─── Sequence ─────────────────────────────────────────────────────────────────
 
+// Mermaid LINETYPE values that represent actual signal messages (not control-flow blocks)
+const SIGNAL_TYPES = new Set([
+  0,  // SOLID  (--> style)
+  1,  // DOTTED (-->> style)
+  3,  // SOLID_CROSS  (-x)
+  4,  // DOTTED_CROSS (--x)
+  5,  // SOLID_OPEN   (->)
+  6,  // DOTTED_OPEN  (-->)
+  24, // SOLID_POINT  (-))
+  25, // DOTTED_POINT (--))
+  33, // BIDIRECTIONAL_SOLID
+  34, // BIDIRECTIONAL_DOTTED
+  // Lifeline top/bottom variants
+  41, 42, 43, 44, 45, 46, 47, 48,
+  51, 52, 53, 54, 55, 56, 57, 58,
+  59, 60, 61,
+])
+
 /**
  * Parse Mermaid `sequenceDiagram` syntax.
- * Supports: participant declarations, ->> and --> messages
+ * Uses Mermaid's internal AST parser to support `actor`, all arrow types,
+ * and `%%` comments. Unsupported block constructs (loop, alt, par, etc.) are skipped.
  */
-export function parseMermaidSequence(text: string): ParsedSequence {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-
-  const firstLine = lines[0]?.toLowerCase() ?? ''
+export async function parseMermaidSequence(text: string): Promise<ParsedSequence> {
+  ensureInitialized()
+  const firstLine = text.trim().split('\n')[0]?.toLowerCase() ?? ''
   if (!firstLine.startsWith('sequencediagram')) {
-    throw new Error('Expected "sequenceDiagram" as the first line.')
+    throw new MermaidParseError('Expected "sequenceDiagram" as the first line.')
   }
 
-  const participantMap = new Map<string, { id: string; label: string; order: number }>()
+  let diagram: Diagram
+  try {
+    diagram = await mermaid.mermaidAPI.getDiagramFromText(text)
+  } catch (err) {
+    throw new MermaidParseError(`Parse error: ${(err as Error).message}`)
+  }
+
+  const db = diagram.db as SequenceDB
+  const actorMap = db.getActors()
+  const actorKeys = db.getActorKeys()
+  const rawMessages = db.getMessages()
+
+  // Build participants in declaration order (actorKeys preserves order)
+  const participantIdMap = new Map<string, string>()
+  const participants: SequenceParticipant[] = actorKeys.map((key, order) => {
+    const actor = actorMap.get(key)!
+    const id = generateId()
+    participantIdMap.set(key, id)
+    return { id, label: actor.description || actor.name, order }
+  })
+
+  // Filter to actual signal messages only; skip control-flow entries
   const messages: SequenceMessage[] = []
-
-  function ensureParticipant(alias: string, label?: string): string {
-    if (!participantMap.has(alias)) {
-      participantMap.set(alias, {
-        id: generateId(),
-        label: label ?? alias,
-        order: participantMap.size,
-      })
-    }
-    return participantMap.get(alias)!.id
-  }
-
-  // participant A as "Label"  or  participant A
-  const PARTICIPANT_RE = /^participant\s+(\S+)(?:\s+as\s+"?([^"]+)"?)?/i
-  // A ->> B: message  or  A --> B: message
-  const MSG_RE = /^([^-\s]+)\s*(?:-->>|--[>-]+|->>|->)\s*([^:]+):\s*(.+)/
-
-  for (const line of lines.slice(1)) {
-    if (line.startsWith('%%') || line.startsWith('note') || line.startsWith('loop') || line === 'end') continue
-
-    const pMatch = PARTICIPANT_RE.exec(line)
-    if (pMatch) {
-      ensureParticipant(pMatch[1], pMatch[2]?.trim())
+  for (const msg of rawMessages) {
+    if (
+      typeof msg.from !== 'string' ||
+      typeof msg.to !== 'string' ||
+      typeof msg.message !== 'string' ||
+      (msg.type !== undefined && !SIGNAL_TYPES.has(msg.type))
+    ) {
+      if (msg.type !== undefined && !SIGNAL_TYPES.has(msg.type)) {
+        console.warn(`[mermaid-parser] Skipped unsupported sequence construct (type=${msg.type}).`)
+      }
       continue
     }
 
-    const mMatch = MSG_RE.exec(line)
-    if (mMatch) {
-      const [, from, to, label] = mMatch
-      const fromId = ensureParticipant(from.trim())
-      const toId = ensureParticipant(to.trim())
-      messages.push({ id: generateId(), from: fromId, to: toId, label: label.trim(), order: messages.length })
+    // Auto-register participants that appear only in messages (not declared)
+    if (!participantIdMap.has(msg.from)) {
+      const id = generateId()
+      participantIdMap.set(msg.from, id)
+      participants.push({ id, label: msg.from, order: participants.length })
     }
+    if (!participantIdMap.has(msg.to)) {
+      const id = generateId()
+      participantIdMap.set(msg.to, id)
+      participants.push({ id, label: msg.to, order: participants.length })
+    }
+
+    messages.push({
+      id: generateId(),
+      from: participantIdMap.get(msg.from)!,
+      to: participantIdMap.get(msg.to)!,
+      label: msg.message,
+      order: messages.length,
+    })
   }
 
-  const participants: SequenceParticipant[] = [...participantMap.values()].sort((a, b) => a.order - b.order)
   return { participants, messages }
 }
 

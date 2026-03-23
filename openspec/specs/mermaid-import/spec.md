@@ -24,7 +24,7 @@ The system SHALL parse Mermaid `sequenceDiagram` syntax and create a Sequence di
 - **THEN** a Sequence diagram is created with participants and messages in the correct order
 
 ### Requirement: Unsupported Mermaid syntax shows a clear error
-The system SHALL display a descriptive error message when the pasted Mermaid syntax is unsupported or invalid, without creating a partial diagram.
+The system SHALL display a descriptive error message when the pasted Mermaid syntax is unsupported, invalid, or fails to parse via the Mermaid AST parser, without creating a partial diagram. Parse errors from the underlying Mermaid parser SHALL be forwarded to the user.
 
 #### Scenario: User imports unsupported Mermaid syntax
 - **WHEN** the user pastes Mermaid syntax for an unsupported type (e.g., `gantt`, `pie`)
@@ -32,7 +32,11 @@ The system SHALL display a descriptive error message when the pasted Mermaid syn
 
 #### Scenario: User imports malformed Mermaid syntax
 - **WHEN** the user pastes syntactically invalid Mermaid text
-- **THEN** the import dialog displays a parse error message with the offending line if possible
+- **THEN** the import dialog displays a parse error message from the Mermaid AST parser with details where possible
+
+#### Scenario: Parse error does not create a partial diagram
+- **WHEN** a parse error occurs mid-way through a large flowchart
+- **THEN** no nodes or edges are added to the canvas
 
 ### Requirement: Imported positions are editable after import
 The system SHALL apply auto-layout on import but allow the user to manually reposition elements after import, with positions persisted.

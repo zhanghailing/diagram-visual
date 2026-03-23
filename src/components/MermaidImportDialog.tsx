@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { DiagramType, DiagramNodeBase, DiagramEdgeBase, SequenceParticipant, SequenceMessage } from '@/types'
-import { detectMermaidType, parseMermaidFlowchart, parseMermaidC4, parseMermaidSequence } from '@/lib/mermaid-parser'
+import { detectMermaidType, parseMermaidFlowchart, parseMermaidC4, parseMermaidSequence, MermaidParseError } from '@/lib/mermaid-parser'
 import { applyDagreLayout } from '@/lib/diagram-layout'
 import {
   Dialog,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import type { Node, Edge } from '@xyflow/react'
 
 interface Props {
@@ -45,21 +45,23 @@ const PLACEHOLDER: Record<DiagramType, string> = {
 export function MermaidImportDialog({ diagramType, onImport, onImportSequence, onClose }: Props) {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  function handleImport() {
+  async function handleImport() {
     setError(null)
     const trimmed = text.trim()
     if (!trimmed) { setError('Please paste Mermaid diagram text.'); return }
 
     const detectedType = detectMermaidType(trimmed)
 
+    setLoading(true)
     try {
       if (detectedType === 'flowchart') {
         if (diagramType !== 'architecture') {
           setError(`This diagram is type "${diagramType}" but you pasted a flowchart. Use an Architecture diagram to import flowcharts.`)
           return
         }
-        const { nodes, edges } = parseMermaidFlowchart(trimmed)
+        const { nodes, edges } = await parseMermaidFlowchart(trimmed)
         const rfNodes: Node[] = nodes.map((n) => ({ id: n.id, type: n.nodeType, position: n.position, data: {} }))
         const rfEdges: Edge[] = edges.map((e) => ({ id: e.id, source: e.source, target: e.target }))
         const laid = applyDagreLayout(rfNodes, rfEdges, false)
@@ -87,7 +89,7 @@ export function MermaidImportDialog({ diagramType, onImport, onImportSequence, o
           setError(`This diagram is type "${diagramType}" but you pasted a sequenceDiagram. Use a Sequence diagram.`)
           return
         }
-        const { participants, messages } = parseMermaidSequence(trimmed)
+        const { participants, messages } = await parseMermaidSequence(trimmed)
         if (onImportSequence) {
           onImportSequence(participants, messages)
         }
@@ -98,7 +100,13 @@ export function MermaidImportDialog({ diagramType, onImport, onImportSequence, o
         )
       }
     } catch (err) {
-      setError(`Parse error: ${(err as Error).message}`)
+      if (err instanceof MermaidParseError) {
+        setError(err.message)
+      } else {
+        setError(`Parse error: ${(err as Error).message}`)
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -133,7 +141,10 @@ export function MermaidImportDialog({ diagramType, onImport, onImportSequence, o
 
         <DialogFooter>
           <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleImport}>Import</Button>
+          <Button size="sm" onClick={handleImport} disabled={loading}>
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            Import
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

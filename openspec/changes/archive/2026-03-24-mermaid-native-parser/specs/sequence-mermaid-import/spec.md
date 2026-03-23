@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Import Mermaid sequence diagram
 The sequence diagram toolbar SHALL include an "Import Mermaid" button. When activated, the system SHALL display a dialog where the user can paste Mermaid `sequenceDiagram` syntax. On confirmation, the system SHALL parse the input using the Mermaid AST parser and append the resulting participants and messages to the currently active phase. The parser SHALL support `participant`, `actor`, all standard arrow types, and `%%` comments. Unsupported block constructs (`loop`, `alt`, `par`, `rect`, `note`) SHALL be skipped with a non-fatal warning.
