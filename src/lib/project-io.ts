@@ -46,7 +46,7 @@ export function importProject(file: File): Promise<Project> {
 }
 
 /** Forward-migrate older project versions to current schema */
-function migrateProject(raw: unknown): Project {
+export function migrateProject(raw: unknown): Project {
   if (typeof raw !== 'object' || raw === null) {
     throw new Error('Not a valid project object')
   }

@@ -1,6 +1,7 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useStore } from '@/store'
 import { exportProject, importProject } from '@/lib/project-io'
+import { JsonImportDialog } from '@/components/JsonImportDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -59,6 +60,7 @@ export default function App() {
   const markExported = useStore((s) => s.markExported)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [jsonImportOpen, setJsonImportOpen] = useState(false)
 
   function handleExport() {
     exportProject(project)
@@ -119,6 +121,14 @@ export default function App() {
                 className="hidden"
                 onChange={handleImport}
               />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 flex-1 text-xs"
+                onClick={() => setJsonImportOpen(true)}
+              >
+                <Upload className="h-3 w-3 mr-1" /> Paste JSON
+              </Button>
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -181,6 +191,8 @@ export default function App() {
           {activeView === 'diagrams' && <DiagramListView />}
         </main>
       </div>
+
+      {jsonImportOpen && <JsonImportDialog onClose={() => setJsonImportOpen(false)} />}
     </TooltipProvider>
   )
 }
