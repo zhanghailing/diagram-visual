@@ -120,6 +120,7 @@ interface AppStore extends UIState {
   reorderSequenceMessages: (diagramId: DiagramId, phase: PhaseId, fromIdx: number, toIdx: number) => void
   toggleHideSequenceParticipant: (diagramId: DiagramId, phase: PhaseId, participantId: string) => void
   toggleHideSequenceMessage: (diagramId: DiagramId, phase: PhaseId, messageId: string) => void
+  updateMermaidCode: (diagramId: DiagramId, code: string) => void
 
   // ── UI ────────────────────────────────────────────────────────────────────
   setActiveView: (view: ActiveView) => void
@@ -547,6 +548,7 @@ export const useStore = create<AppStore>()(
         baseEdges: [],
         phases: {},
         ...(type === 'sequence' ? { baseParticipants: [], baseMessages: [], sequencePhases: {} } : {}),
+        ...(type === 'mermaid' ? { mermaidCode: 'flowchart LR\n  A --> B' } : {}),
       }
       set((s) => {
         const diagrams = [...(s.project.diagrams ?? []), diagram]
@@ -916,6 +918,17 @@ export const useStore = create<AppStore>()(
             : [...sp.hiddenMessageIds, messageId]
           return { ...d, sequencePhases: { ...d.sequencePhases, [phase]: { ...sp, hiddenMessageIds } } }
         })
+        const project = { ...s.project, diagrams }
+        saveToLocalStorage(project)
+        return { project, hasUnsavedChanges: true }
+      })
+    },
+
+    updateMermaidCode: (diagramId, code) => {
+      set((s) => {
+        const diagrams = (s.project.diagrams ?? []).map((d) =>
+          d.id === diagramId ? { ...d, mermaidCode: code } : d,
+        )
         const project = { ...s.project, diagrams }
         saveToLocalStorage(project)
         return { project, hasUnsavedChanges: true }

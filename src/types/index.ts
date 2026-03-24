@@ -162,7 +162,7 @@ export type DiagramId = string
 export type DiagramNodeId = string
 export type DiagramEdgeId = string
 export type PhaseId = string
-export type DiagramType = 'c4-component' | 'architecture' | 'sequence'
+export type DiagramType = 'c4-component' | 'architecture' | 'sequence' | 'mermaid'
 
 export interface DiagramPhase {
   id: string
@@ -257,4 +257,6 @@ export interface Diagram {
   baseParticipants?: SequenceParticipant[]
   baseMessages?: SequenceMessage[]
   sequencePhases?: Partial<Record<PhaseId, SequencePhaseState>>
+  /** Raw Mermaid syntax (only used when type === 'mermaid') */
+  mermaidCode?: string
 }

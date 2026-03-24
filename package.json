@@ -10,6 +10,8 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@mermaid-js/layout-elk": "^0.2.1",
+    "@mermaid-js/mermaid-zenuml": "^0.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",

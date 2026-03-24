@@ -40,6 +40,8 @@ const PLACEHOLDER: Record<DiagramType, string> = {
   B ->> C: Validate token
   C -->> B: OK
   B -->> A: Response`,
+  mermaid: `flowchart LR
+  A --> B`,
 }
 
 export function MermaidImportDialog({ diagramType, onImport, onImportSequence, onClose }: Props) {

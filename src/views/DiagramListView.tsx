@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import type { DiagramType } from '@/types'
 import { DiagramCanvasView } from './DiagramCanvasView'
 import { SequenceDiagramView } from './SequenceDiagramView'
+import { MermaidDiagramView } from './MermaidDiagramView'
 import { PhaseDiffView } from '@/components/PhaseDiffView'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +39,7 @@ const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
   'c4-component': 'C4 Component',
   architecture: 'Architecture',
   sequence: 'Sequence',
+  mermaid: 'Mermaid',
 }
 
 export function DiagramListView() {
@@ -77,7 +79,7 @@ export function DiagramListView() {
             <ArrowLeft className="h-3.5 w-3.5" /> All Diagrams
           </Button>
           <div className="flex-1" />
-          {activeDiagram.type !== 'sequence' && (
+          {activeDiagram.type !== 'sequence' && activeDiagram.type !== 'mermaid' && (
             <Button
               variant="outline"
               size="sm"
@@ -93,11 +95,13 @@ export function DiagramListView() {
           <div className="flex-1 min-w-0">
             {activeDiagram.type === 'sequence' ? (
               <SequenceDiagramView diagram={activeDiagram} />
+            ) : activeDiagram.type === 'mermaid' ? (
+              <MermaidDiagramView diagram={activeDiagram} />
             ) : (
               <DiagramCanvasView diagram={activeDiagram} />
             )}
           </div>
-          {showDiff && activeDiagram.type !== 'sequence' && (
+          {showDiff && activeDiagram.type !== 'sequence' && activeDiagram.type !== 'mermaid' && (
             <div className="w-64 shrink-0 border-l bg-card overflow-y-auto">
               <div className="px-3 py-2 border-b">
                 <span className="text-xs font-semibold">Phase Diff</span>
@@ -167,7 +171,9 @@ export function DiagramListView() {
                 <p className="text-xs text-muted-foreground">
                   {d.type === 'sequence'
                     ? `${(d.baseParticipants ?? []).length} participants`
-                    : `${d.baseNodes.length} nodes · ${d.baseEdges.length} edges`}
+                    : d.type === 'mermaid'
+                      ? `${(d.mermaidCode ?? '').split('\n').length} lines`
+                      : `${d.baseNodes.length} nodes · ${d.baseEdges.length} edges`}
                 </p>
               </div>
             ))}
@@ -199,6 +205,7 @@ export function DiagramListView() {
                     <SelectItem value="architecture">Architecture</SelectItem>
                     <SelectItem value="c4-component">C4 Component</SelectItem>
                     <SelectItem value="sequence">Sequence</SelectItem>
+                    <SelectItem value="mermaid">Mermaid</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
